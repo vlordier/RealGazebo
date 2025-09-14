@@ -1,12 +1,22 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+//
+// Licensed under the MIT License.
+// See LICENSE file in the project root for full license information.
+
 #include "Widgets/RealGazeboMainWidget.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Components/ListView.h"
 #include "Components/TextBlock.h"
-#include "Components/ProgressBar.h"
 #include "TimerManager.h"
 #include "RealGazeboUI.h"
-#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "Widgets/RealGazeboVehicleEntry.h"
+#include "ViewerController/RealGazeboViewerDirector.h"
+#include "Vehicles/VehicleBasePawn.h"
+#include "Kismet/GameplayStatics.h"
 
 URealGazeboMainWidget::URealGazeboMainWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -18,6 +28,7 @@ URealGazeboMainWidget::URealGazeboMainWidget(const FObjectInitializer& ObjectIni
     // Initialize tracking variables
     LastVehicleCount = 0;
     bLastConnectionStatus = false;
+    CurrentSelectedVehicleID = FVehicleID(0, 0); // Invalid ID as default
     
     // Enable ticking for real-time updates
     bIsFocusable = false;
@@ -28,7 +39,7 @@ void URealGazeboMainWidget::NativeConstruct()
 {
     Super::NativeConstruct();
     
-    UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboMainWidget: Constructing UI"));
+    // Constructing UI
     
     // Initialize subsystem connection
     InitializeSubsystemConnection();
@@ -37,8 +48,11 @@ void URealGazeboMainWidget::NativeConstruct()
     if (VehicleListView)
     {
         VehicleListView->OnItemSelectionChanged().AddUObject(this, &URealGazeboMainWidget::OnVehicleItemSelectionChanged);
-        
-        UE_LOG(LogRealGazeboUI, Verbose, TEXT("ListView events bound successfully"));
+
+        // Bind entry widget generation event to handle newly created/recycled widgets
+        VehicleListView->OnEntryWidgetGenerated().AddUObject(this, &URealGazeboMainWidget::OnEntryWidgetGenerated);
+
+        // ListView events bound
     }
     else
     {
@@ -57,7 +71,7 @@ void URealGazeboMainWidget::NativeConstruct()
             true
         );
         
-        UE_LOG(LogRealGazeboUI, Log, TEXT("Update timer started with interval: %.3f seconds"), UpdateInterval);
+        // Update timer started
     }
     
     // Initial data refresh
@@ -66,7 +80,7 @@ void URealGazeboMainWidget::NativeConstruct()
 
 void URealGazeboMainWidget::NativeDestruct()
 {
-    UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboMainWidget: Destructing UI"));
+    // Destructing UI
     
     // Clear timer
     if (UWorld* World = GetWorld())
@@ -83,12 +97,6 @@ void URealGazeboMainWidget::NativeDestruct()
 void URealGazeboMainWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
-    
-    // Update performance stats
-    // Performance monitoring removed
-    if (false)
-    {
-    }
 }
 
 void URealGazeboMainWidget::InitializeSubsystemConnection()
@@ -98,7 +106,7 @@ void URealGazeboMainWidget::InitializeSubsystemConnection()
     
     if (BridgeSubsystem.IsValid())
     {
-        UE_LOG(LogRealGazeboUI, Log, TEXT("Successfully connected to GazeboBridgeSubsystem"));
+        // Connected to GazeboBridgeSubsystem
         
         // Note: Subsystem events will be handled through the update timer for now
         // Future enhancement: Add proper event handlers for OnVehicleSpawned and OnVehicleUpdated
@@ -176,7 +184,7 @@ void URealGazeboMainWidget::UpdateVehicleData()
     
     if (bVehicleListChanged)
     {
-        UE_LOG(LogRealGazeboUI, Verbose, TEXT("Vehicle list updated: %d vehicles"), CurrentVehicleIDs.Num());
+        // Vehicle list updated
     }
 }
 
@@ -202,11 +210,9 @@ URealGazeboVehicleListItem* URealGazeboMainWidget::AddVehicleToList(const FVehic
     if (VehicleListView)
     {
         VehicleListView->AddItem(NewItem);
-        
-        // Auto-scroll removed
     }
     
-    UE_LOG(LogRealGazeboUI, Log, TEXT("Added vehicle to list: %s"), *NewItem->VehicleName);
+    // Added vehicle to list
     return NewItem;
 }
 
@@ -226,7 +232,7 @@ void URealGazeboMainWidget::RemoveVehicleFromList(const FVehicleID& VehicleID)
         // Remove from map
         VehicleItemMap.Remove(VehicleID);
         
-        UE_LOG(LogRealGazeboUI, Log, TEXT("Removed vehicle from list: %s"), *Item->VehicleName);
+        // Removed vehicle from list
     }
 }
 
@@ -271,14 +277,70 @@ void URealGazeboMainWidget::OnVehicleItemSelectionChanged(UObject* SelectedItem)
 {
     if (URealGazeboVehicleListItem* VehicleItem = Cast<URealGazeboVehicleListItem>(SelectedItem))
     {
-        // Update selection state
-        for (auto& Pair : VehicleItemMap)
+        // Update current selection
+        CurrentSelectedVehicleID = VehicleItem->VehicleID;
+
+        // Notify ViewerDirector for camera integration
+        if (ViewerDirector.IsValid())
         {
-            // Selection handled in Entry widget
+            AVehicleBasePawn* SelectedVehiclePawn = FindVehiclePawnByID(VehicleItem->VehicleID);
+            if (SelectedVehiclePawn)
+            {
+                ViewerDirector->SetCurrentVehicle(SelectedVehiclePawn);
+                UE_LOG(LogRealGazeboUI, Log, TEXT("MainWidget: Set camera target to vehicle %s (ID: %d_%d)"),
+                       *SelectedVehiclePawn->GetName(),
+                       VehicleItem->VehicleID.VehicleType,
+                       VehicleItem->VehicleID.VehicleNum);
+            }
+            else
+            {
+                // Vehicle not found in world - clear camera target
+                ViewerDirector->SetCurrentVehicle(nullptr);
+                UE_LOG(LogRealGazeboUI, Warning, TEXT("MainWidget: Vehicle pawn not found for ID %d_%d, cleared camera target"),
+                       VehicleItem->VehicleID.VehicleType,
+                       VehicleItem->VehicleID.VehicleNum);
+            }
         }
-        
+        else
+        {
+            UE_LOG(LogRealGazeboUI, Log, TEXT("MainWidget: No ViewerDirector available for camera integration"));
+        }
+
+        // Call Blueprint events
         OnVehicleSelected(VehicleItem);
-        UE_LOG(LogRealGazeboUI, Verbose, TEXT("Vehicle selected: %s"), *VehicleItem->VehicleName);
+        OnCameraTargetChanged(VehicleItem);
+    }
+    else
+    {
+        // Selection cleared
+        CurrentSelectedVehicleID = FVehicleID(0, 0); // Invalid ID
+
+        // Clear ViewerDirector target
+        if (ViewerDirector.IsValid())
+        {
+            ViewerDirector->SetCurrentVehicle(nullptr);
+            UE_LOG(LogRealGazeboUI, Log, TEXT("MainWidget: Cleared camera target (selection cleared)"));
+        }
+
+        // Notify Blueprint that camera target was cleared
+        OnCameraTargetChanged(nullptr);
+    }
+}
+
+void URealGazeboMainWidget::OnEntryWidgetGenerated(UUserWidget& GeneratedWidget)
+{
+    // This is called whenever a ListView entry widget is created or recycled
+    if (URealGazeboVehicleEntry* VehicleEntry = Cast<URealGazeboVehicleEntry>(&GeneratedWidget))
+    {
+        // Entry widget generated/recycled
+
+        // Configure DataTable if available
+        if (VehicleTypeImageDataTable)
+        {
+            VehicleEntry->SetVehicleTypeImageDataTable(VehicleTypeImageDataTable);
+        }
+
+        // The widget will have its data set via NativeOnListItemObjectSet automatically.
     }
 }
 
@@ -291,7 +353,7 @@ void URealGazeboMainWidget::ClearAllVehicles()
     }
     
     VehicleItemMap.Empty();
-    UE_LOG(LogRealGazeboUI, Log, TEXT("Cleared all vehicles from list"));
+    // Cleared all vehicles from list
 }
 
 void URealGazeboMainWidget::RefreshVehicleList()
@@ -340,21 +402,94 @@ TArray<URealGazeboVehicleListItem*> URealGazeboMainWidget::GetSelectedVehicleIte
 }
 
 
-URealGazeboMainWidget* URealGazeboMainWidget::CreateMainWidget(UObject* WorldContext)
+
+
+void URealGazeboMainWidget::SetSelectedVehicle(FVehicleID VehicleID)
 {
-    if (!WorldContext)
+    // Check if already selected
+    if (CurrentSelectedVehicleID == VehicleID)
     {
-        UE_LOG(LogRealGazeboUI, Error, TEXT("CreateMainWidget: Invalid WorldContext"));
+        return;
+    }
+
+    FVehicleID PreviousSelectedVehicleID = CurrentSelectedVehicleID;
+    CurrentSelectedVehicleID = VehicleID;
+
+    // Vehicle selection changed
+
+    // Selection is now handled by ListView - no manual widget updates needed
+    // Vehicle selection handled by ListView
+}
+
+void URealGazeboMainWidget::ClearVehicleSelection()
+{
+    if (CurrentSelectedVehicleID.VehicleNum == 0 && CurrentSelectedVehicleID.VehicleType == 0)
+    {
+        // Already cleared
+        return;
+    }
+
+    FVehicleID PreviousSelectedVehicleID = CurrentSelectedVehicleID;
+    CurrentSelectedVehicleID = FVehicleID(0, 0); // Invalid ID
+
+    // Cleared vehicle selection
+
+    // Clear ListView selection - this will automatically update visual feedback
+    if (VehicleListView)
+    {
+        VehicleListView->ClearSelection();
+        // Cleared ListView selection
+    }
+}
+
+void URealGazeboMainWidget::SetVehicleTypeImageDataTable(UDataTable* DataTable)
+{
+    VehicleTypeImageDataTable = DataTable;
+
+    // Configure all currently displayed vehicle entry widgets
+    if (VehicleListView)
+    {
+        // Get all displayed widgets and configure them
+        TArray<UUserWidget*> DisplayedEntryWidgets = VehicleListView->GetDisplayedEntryWidgets();
+        for (UUserWidget* Widget : DisplayedEntryWidgets)
+        {
+            if (URealGazeboVehicleEntry* VehicleEntry = Cast<URealGazeboVehicleEntry>(Widget))
+            {
+                VehicleEntry->SetVehicleTypeImageDataTable(DataTable);
+            }
+        }
+    }
+}
+
+void URealGazeboMainWidget::SetViewerDirector(ARealGazeboViewerDirector* InViewerDirector)
+{
+    ViewerDirector = InViewerDirector;
+    UE_LOG(LogRealGazeboUI, Log, TEXT("MainWidget: ViewerDirector reference set for camera integration"));
+}
+
+AVehicleBasePawn* URealGazeboMainWidget::FindVehiclePawnByID(const FVehicleID& VehicleID) const
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
         return nullptr;
     }
-    
-    // For now, return nullptr - this will be implemented when we have Blueprint widgets
-    UE_LOG(LogRealGazeboUI, Warning, TEXT("CreateMainWidget: Not implemented yet - requires Blueprint widget class"));
+
+    // Find vehicle pawn by searching all VehicleBasePawn actors
+    TArray<AActor*> FoundActors;
+    UGameplayStatics::GetAllActorsOfClass(World, AVehicleBasePawn::StaticClass(), FoundActors);
+
+    for (AActor* Actor : FoundActors)
+    {
+        if (AVehicleBasePawn* VehiclePawn = Cast<AVehicleBasePawn>(Actor))
+        {
+            if (VehiclePawn->VehicleID == VehicleID)
+            {
+                return VehiclePawn;
+            }
+        }
+    }
+
     return nullptr;
 }
 
-URealGazeboMainWidget* URealGazeboMainWidget::GetMainWidget(UObject* WorldContext)
-{
-    // For now, return nullptr - this will be implemented when we have widget management
-    return nullptr;
-}

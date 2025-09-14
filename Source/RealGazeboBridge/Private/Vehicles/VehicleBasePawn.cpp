@@ -1,10 +1,16 @@
 
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+//
+// Licensed under the MIT License.
+// See LICENSE file in the project root for full license information.
+
 #include "VehicleBasePawn.h"
 #include "Engine/Engine.h"
 #include "RealGazeboBridge.h"
 #include "Core/GazeboBridgeSubsystem.h"
-#include "Camera/CameraComponent.h"
-#include "GameFramework/SpringArmComponent.h"
 
 AVehicleBasePawn::AVehicleBasePawn()
 {
@@ -19,24 +25,6 @@ AVehicleBasePawn::AVehicleBasePawn()
     VehicleMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VehicleMesh"));
     VehicleMesh->SetupAttachment(RootComponent);
 
-    // Create camera components for RealGazeboUI integration
-    FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
-    FirstPersonCamera->SetupAttachment(RootComponent);
-    FirstPersonCamera->SetRelativeLocation(FVector(100.0f, 0.0f, 50.0f)); // Forward and up from center
-    FirstPersonCamera->SetActive(false); // Disabled by default
-    FirstPersonCamera->ComponentTags.Add(TEXT("FirstPerson")); // Tag for identification
-
-    ThirdPersonSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("ThirdPersonSpringArm"));
-    ThirdPersonSpringArm->SetupAttachment(RootComponent);
-    ThirdPersonSpringArm->TargetArmLength = 400.0f;
-    ThirdPersonSpringArm->SetRelativeRotation(FRotator(-15.0f, 0.0f, 0.0f)); // Slight downward angle
-    ThirdPersonSpringArm->bDoCollisionTest = true;
-    ThirdPersonSpringArm->bUsePawnControlRotation = false; // Fixed relative to vehicle
-
-    ThirdPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ThirdPersonCamera"));
-    ThirdPersonCamera->SetupAttachment(ThirdPersonSpringArm, USpringArmComponent::SocketName);
-    ThirdPersonCamera->SetActive(false); // Disabled by default
-    ThirdPersonCamera->ComponentTags.Add(TEXT("ThirdPerson")); // Tag for identification
 
     // Initialize identification
     VehicleID = FVehicleID();
@@ -398,27 +386,6 @@ void AVehicleBasePawn::PrintVehicleStatus() const
            RotatingComponents.Num(), ControllableComponents.Num());
 }
 
-void AVehicleBasePawn::ConfigureCameraSettings(float FieldOfView, float SpringArmLength)
-{
-    // Configure first person camera
-    if (FirstPersonCamera)
-    {
-        FirstPersonCamera->SetFieldOfView(FieldOfView);
-    }
-
-    // Configure third person camera and spring arm
-    if (ThirdPersonCamera)
-    {
-        ThirdPersonCamera->SetFieldOfView(FieldOfView);
-    }
-
-    if (ThirdPersonSpringArm)
-    {
-        ThirdPersonSpringArm->TargetArmLength = SpringArmLength;
-    }
-
-    UE_LOG(LogRealGazeboBridge, Verbose, TEXT("Camera settings updated: FOV=%.1f, SpringArmLength=%.1f"), FieldOfView, SpringArmLength);
-}
 
 void AVehicleBasePawn::SetVehicleDisplayName(const FVehicleID& InVehicleID, uint8 InVehicleType)
 {

@@ -1,3 +1,11 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+//
+// Licensed under the MIT License.
+// See LICENSE file in the project root for full license information.
+
 #include "Data/RealGazeboVehicleListItem.h"
 #include "Engine/Engine.h"
 #include "RealGazeboUI.h"
@@ -34,8 +42,7 @@ void URealGazeboVehicleListItem::UpdateFromRuntimeData(const FVehicleRuntimeData
     // Keep status as placeholder
     Status = TEXT("No Data");
     
-    UE_LOG(LogRealGazeboUI, Verbose, TEXT("Updated vehicle %s: Position=%s, Status=%s"), 
-           *VehicleName, *Position.ToString(), *Status);
+    // Vehicle data updated
 }
 
 void URealGazeboVehicleListItem::UpdateTransform(const FVector& NewPosition, const FRotator& NewRotation)

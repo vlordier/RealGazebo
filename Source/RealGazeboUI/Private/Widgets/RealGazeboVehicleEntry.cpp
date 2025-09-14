@@ -1,17 +1,24 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+//
+// Licensed under the MIT License.
+// See LICENSE file in the project root for full license information.
+
 #include "Widgets/RealGazeboVehicleEntry.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
-#include "Components/ProgressBar.h"
-#include "Components/Border.h"
 #include "Engine/World.h"
-#include "TimerManager.h"
+#include "Engine/DataTable.h"
 #include "RealGazeboUI.h"
+#include "Data/VehicleTypeImageData.h"
+#include "Widgets/RealGazeboMainWidget.h"
 
 URealGazeboVehicleEntry::URealGazeboVehicleEntry(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
 {
     // Set default values
-    UpdateFrequency = 10.0f;
     
     // Initialize state
     bIsSelected = false;
@@ -22,21 +29,18 @@ void URealGazeboVehicleEntry::NativeConstruct()
 {
     Super::NativeConstruct();
     
-    UE_LOG(LogRealGazeboUI, Verbose, TEXT("VehicleEntry: Constructing entry widget"));
-    
-    // Start update timer
-    StartUpdateTimer();
-    
+    // Vehicle entry widget constructed
+
     // Initial display update
     UpdateDisplayFromData();
+
+    // Initialize selection image
+    UpdateSelectionImage();
 }
 
 void URealGazeboVehicleEntry::NativeDestruct()
 {
-    UE_LOG(LogRealGazeboUI, Verbose, TEXT("VehicleEntry: Destructing entry widget"));
-    
-    // Stop update timer
-    StopUpdateTimer();
+    // Vehicle entry widget destructed
     
     Super::NativeDestruct();
 }
@@ -54,31 +58,60 @@ void URealGazeboVehicleEntry::NativeTick(const FGeometry& MyGeometry, float InDe
 
 void URealGazeboVehicleEntry::NativeOnListItemObjectSet(UObject* ListItemObject)
 {
+    // Force clear any previous selection state immediately to prevent recycling issues
+    if (VehicleSelectImage)
+    {
+        VehicleSelectImage->SetBrush(FSlateBrush());
+        // Clear selection image during widget recycling
+    }
+
+    // Reset internal selection state
+    bIsSelected = false;
+
     // Set the vehicle list item data
     VehicleListItem = Cast<URealGazeboVehicleListItem>(ListItemObject);
-    
+
     if (VehicleListItem)
     {
-        UE_LOG(LogRealGazeboUI, Verbose, TEXT("VehicleEntry: Set list item for vehicle %s"), *VehicleListItem->VehicleName);
-        
+        // Widget recycled/created for vehicle
+
         // Update display with new data
         UpdateDisplayFromData();
-        
+
+        // Force update selection state based on ListView's current selection
+        // This ensures proper state after recycling
+        UpdateSelectionImage();
+
     }
     else
     {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("VehicleEntry: Invalid list item object"));
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("VehicleEntry[%p]: Invalid list item object"), this);
     }
 }
 
 void URealGazeboVehicleEntry::NativeOnItemSelectionChanged(bool bIsSelectedParam)
 {
+    FString VehicleName = VehicleListItem ? VehicleListItem->VehicleName : TEXT("Unknown");
+
+    // Selection state changing
+
+    // Always force clear the image before state change to prevent stale visuals
+    if (VehicleSelectImage)
+    {
+        VehicleSelectImage->SetBrush(FSlateBrush());
+        // Force clear selection image before state change
+    }
+
+    // Update internal selection state
     this->bIsSelected = bIsSelectedParam;
-    
+
+    // Update selection image based on ListView selection state
+    UpdateSelectionImage();
+
     // Call Blueprint event
     OnSelectionStateChanged(this->bIsSelected);
-    
-    UE_LOG(LogRealGazeboUI, Verbose, TEXT("VehicleEntry: Selection changed to %s"), this->bIsSelected ? TEXT("Selected") : TEXT("Not Selected"));
+
+    // Selection change completed
 }
 
 void URealGazeboVehicleEntry::UpdateDisplayFromData()
@@ -97,6 +130,9 @@ void URealGazeboVehicleEntry::UpdateDisplayFromData()
     UpdatePositionText();
     UpdateBatteryDisplay();
     UpdateStatusDisplay();
+    
+    // Update vehicle type image
+    UpdateVehicleTypeImage();
     
     // Call Blueprint event
     OnVehicleDataChanged();
@@ -181,40 +217,7 @@ void URealGazeboVehicleEntry::UpdateStatusDisplay()
 }
 
 
-FString URealGazeboVehicleEntry::FormatPositionText(const FVector& Position) const
-{
-    return FString::Printf(TEXT("X:%.1f Y:%.1f Z:%.1f"), Position.X, Position.Y, Position.Z);
-}
 
-
-void URealGazeboVehicleEntry::OnUpdateTimer()
-{
-    // This timer-based update is supplemented by NativeTick for responsiveness
-    UpdateDisplayFromData();
-}
-
-void URealGazeboVehicleEntry::StartUpdateTimer()
-{
-    if (UWorld* World = GetWorld())
-    {
-        float UpdateInterval = 1.0f / FMath::Max(UpdateFrequency, 1.0f);
-        World->GetTimerManager().SetTimer(
-            UpdateTimerHandle,
-            this,
-            &URealGazeboVehicleEntry::OnUpdateTimer,
-            UpdateInterval,
-            true
-        );
-    }
-}
-
-void URealGazeboVehicleEntry::StopUpdateTimer()
-{
-    if (UWorld* World = GetWorld())
-    {
-        World->GetTimerManager().ClearTimer(UpdateTimerHandle);
-    }
-}
 
 
 FVehicleID URealGazeboVehicleEntry::GetVehicleID() const
@@ -226,7 +229,193 @@ FVehicleID URealGazeboVehicleEntry::GetVehicleID() const
     return FVehicleID(0, 0);
 }
 
-void URealGazeboVehicleEntry::RefreshDisplay()
+void URealGazeboVehicleEntry::UpdateVehicleTypeImage()
 {
-    UpdateDisplayFromData();
+    if (!VehicleTypeImage || !VehicleListItem)
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("VehicleEntry: UpdateVehicleTypeImage called but VehicleTypeImage=%s, VehicleListItem=%s"), 
+               VehicleTypeImage ? TEXT("Valid") : TEXT("NULL"), 
+               VehicleListItem ? TEXT("Valid") : TEXT("NULL"));
+        return;
+    }
+    
+    // Always keep the widget visible
+    VehicleTypeImage->SetVisibility(ESlateVisibility::Visible);
+    
+    // Get the vehicle type from the vehicle list item
+    uint8 VehicleTypeCode = VehicleListItem->VehicleID.VehicleType;
+    FString VehicleName = VehicleListItem->VehicleName;
+    
+    // Update vehicle type image
+    
+    // Try to get image from data table first
+    UTexture2D* VehicleImage = GetVehicleTypeImageFromDataTable(VehicleTypeCode);
+    
+    if (VehicleImage)
+    {
+        // Data table has a valid image for this vehicle type, use it
+        VehicleTypeImage->SetBrushFromTexture(VehicleImage);
+        // Set vehicle type image from data table
+    }
+    else
+    {
+        // No data table image found, trying default image
+        
+        // No image from data table, try to use default image
+        if (DefaultVehicleImage.IsValid())
+        {
+            UTexture2D* DefaultImage = DefaultVehicleImage.LoadSynchronous();
+            if (DefaultImage)
+            {
+                VehicleTypeImage->SetBrushFromTexture(DefaultImage);
+                // Using default vehicle image
+            }
+            else
+            {
+                UE_LOG(LogRealGazeboUI, Error, TEXT("VehicleEntry: Default image LoadSynchronous() failed for '%s'"), *VehicleName);
+            }
+        }
+        else if (!DefaultVehicleImage.IsNull())
+        {
+            // Try to load the default image if not already loaded
+            UTexture2D* DefaultImage = DefaultVehicleImage.LoadSynchronous();
+            if (DefaultImage)
+            {
+                VehicleTypeImage->SetBrushFromTexture(DefaultImage);
+                // Loaded and set default vehicle image
+            }
+            else
+            {
+                UE_LOG(LogRealGazeboUI, Error, TEXT("VehicleEntry: Failed to load default image for '%s'"), *VehicleName);
+            }
+        }
+        else
+        {
+            // No default image configured, keeping current image
+        }
+    }
 }
+
+UTexture2D* URealGazeboVehicleEntry::GetVehicleTypeImageFromDataTable(uint8 VehicleTypeCode) const
+{
+    if (!VehicleTypeImageDataTable)
+    {
+        // DataTable is NULL
+        return nullptr;
+    }
+    
+    // Get all rows from the data table
+    TArray<FVehicleTypeImageRow*> AllRows;
+    VehicleTypeImageDataTable->GetAllRows<FVehicleTypeImageRow>(TEXT("GetVehicleTypeImageFromDataTable"), AllRows);
+    
+    // Search data table for vehicle type
+    
+    // Find the row with matching vehicle type code
+    for (const FVehicleTypeImageRow* Row : AllRows)
+    {
+        if (Row && Row->VehicleTypeCode == VehicleTypeCode)
+        {
+            // Found matching row
+            
+            // Load the soft object pointer
+            if (Row->VehicleImage.IsValid())
+            {
+                UTexture2D* LoadedImage = Row->VehicleImage.LoadSynchronous();
+                // Image already loaded
+                return LoadedImage;
+            }
+            else if (!Row->VehicleImage.IsNull())
+            {
+                // Try to load if not already loaded
+                UTexture2D* LoadedImage = Row->VehicleImage.LoadSynchronous();
+                // Loading image synchronously
+                return LoadedImage;
+            }
+            else
+            {
+                // Row found but VehicleImage is NULL
+            }
+            break;
+        }
+    }
+    
+    // No matching row found
+    return nullptr;
+}
+
+
+
+
+
+void URealGazeboVehicleEntry::UpdateSelectionImage()
+{
+    if (!VehicleSelectImage)
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("VehicleEntry[%p]: UpdateSelectionImage called but VehicleSelectImage is NULL"), this);
+        return;
+    }
+
+    FString VehicleName = VehicleListItem ? VehicleListItem->VehicleName : TEXT("Unknown");
+
+    // Always force clear the image first to prevent state persistence issues
+    VehicleSelectImage->SetBrush(FSlateBrush());
+
+    if (bIsSelected)
+    {
+        // Vehicle is selected by ListView, show selected image
+        if (!SelectedImage.IsNull())
+        {
+            UTexture2D* SelectionTexture = SelectedImage.LoadSynchronous();
+            if (SelectionTexture)
+            {
+                // Create a new brush to ensure clean state
+                FSlateBrush NewBrush;
+                NewBrush.SetResourceObject(SelectionTexture);
+                NewBrush.DrawAs = ESlateBrushDrawType::Image;
+                NewBrush.Tiling = ESlateBrushTileType::NoTile;
+
+                VehicleSelectImage->SetBrush(NewBrush);
+
+                // Applied SELECTED image
+
+                // Selection image applied
+            }
+            else
+            {
+                UE_LOG(LogRealGazeboUI, Warning, TEXT("VehicleEntry[%p]: Failed to load SelectedImage for '%s'"), this, *VehicleName);
+            }
+        }
+        else
+        {
+            UE_LOG(LogRealGazeboUI, Warning, TEXT("VehicleEntry[%p]: No SelectedImage configured for '%s' - using empty brush"), this, *VehicleName);
+        }
+    }
+    else
+    {
+        // Vehicle is not selected, show unselected image or keep clear
+        if (!UnselectedImage.IsNull())
+        {
+            UTexture2D* UnselectedTexture = UnselectedImage.LoadSynchronous();
+            if (UnselectedTexture)
+            {
+                // Create a new brush for unselected state
+                FSlateBrush NewBrush;
+                NewBrush.SetResourceObject(UnselectedTexture);
+                NewBrush.DrawAs = ESlateBrushDrawType::Image;
+                NewBrush.Tiling = ESlateBrushTileType::NoTile;
+
+                VehicleSelectImage->SetBrush(NewBrush);
+                // Applied UNSELECTED image
+            }
+            else
+            {
+                UE_LOG(LogRealGazeboUI, Warning, TEXT("VehicleEntry[%p]: Failed to load UnselectedImage for '%s'"), this, *VehicleName);
+            }
+        }
+        else
+        {
+            // Cleared selection image
+        }
+    }
+}
+

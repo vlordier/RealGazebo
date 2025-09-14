@@ -1,3 +1,10 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+//
+// Licensed under the MIT License.
+// See LICENSE file in the project root for full license information.
 
 #pragma once
 
@@ -60,21 +67,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bridge|Components")
     TArray<TObjectPtr<USceneComponent>> ControllableComponents;
 
-    //----------------------------------------------------------
-    // Camera Components (for RealGazeboUI integration)
-    //----------------------------------------------------------
-
-    /** First person camera component (cockpit view) */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bridge|Camera Components")
-    TObjectPtr<class UCameraComponent> FirstPersonCamera;
-
-    /** Spring arm component for third person camera */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bridge|Camera Components")
-    TObjectPtr<class USpringArmComponent> ThirdPersonSpringArm;
-
-    /** Third person camera component (following view) */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bridge|Camera Components")
-    TObjectPtr<class UCameraComponent> ThirdPersonCamera;
 
     //----------------------------------------------------------
     // Vehicle State Updates (called by subsystem)
@@ -147,25 +139,6 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Bridge|Events")
     void OnServoStatesChanged(const TArray<FVector>& ServoPositions, const TArray<FQuat>& ServoRotations);
 
-    //----------------------------------------------------------
-    // Camera Functions (for RealGazeboUI integration)
-    //----------------------------------------------------------
-
-    /** Get the first person camera component */
-    UFUNCTION(BlueprintCallable, Category = "Bridge|Camera")
-    UCameraComponent* GetFirstPersonCamera() const { return FirstPersonCamera; }
-
-    /** Get the third person camera component */
-    UFUNCTION(BlueprintCallable, Category = "Bridge|Camera") 
-    UCameraComponent* GetThirdPersonCamera() const { return ThirdPersonCamera; }
-
-    /** Get the spring arm component */
-    UFUNCTION(BlueprintCallable, Category = "Bridge|Camera")
-    USpringArmComponent* GetThirdPersonSpringArm() const { return ThirdPersonSpringArm; }
-
-    /** Configure camera settings (called by UI system) */
-    UFUNCTION(BlueprintCallable, Category = "Bridge|Camera")
-    void ConfigureCameraSettings(float FieldOfView = 90.0f, float SpringArmLength = 400.0f);
 
 protected:
     //----------------------------------------------------------

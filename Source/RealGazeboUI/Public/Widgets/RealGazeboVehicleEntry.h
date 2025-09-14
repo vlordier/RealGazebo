@@ -1,3 +1,11 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+//
+// Licensed under the MIT License.
+// See LICENSE file in the project root for full license information.
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -5,10 +13,10 @@
 #include "Blueprint/IUserObjectListEntry.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
-#include "Components/ProgressBar.h"
-#include "Components/Border.h"
 #include "Engine/Texture2D.h"
+#include "Engine/DataTable.h"
 #include "Data/RealGazeboVehicleListItem.h"
+#include "Data/VehicleTypeImageData.h"
 #include "RealGazeboVehicleEntry.generated.h"
 
 /**
@@ -73,14 +81,30 @@ protected:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UTextBlock> StatusText;
 
+    /** Vehicle type image display, Folding panel */
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UImage> VehicleTypeImage;
+
+    /** Vehicle selection image, positioned over VehicleTypeImage, Folding panel */
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UImage> VehicleSelectImage;
+
 public:
     //----------------------------------------------------------
     // Configuration
     //----------------------------------------------------------
 
-    /** Update frequency for real-time data (Hz) */
+    /** Default image to display when no specific vehicle type image is found */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Configuration")
-    float UpdateFrequency = 10.0f;
+    TSoftObjectPtr<UTexture2D> DefaultVehicleImage;
+
+    /** Image to display when vehicle is selected */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Configuration")
+    TSoftObjectPtr<UTexture2D> SelectedImage;
+
+    /** Image to display when vehicle is not selected (transparent/empty) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Configuration")
+    TSoftObjectPtr<UTexture2D> UnselectedImage;
 
 
     //----------------------------------------------------------
@@ -100,12 +124,20 @@ public:
     FVehicleID GetVehicleID() const;
 
     //----------------------------------------------------------
+    // Manager Integration
+    //----------------------------------------------------------
+
+    /** Set vehicle type image data table (called by manager) */
+    UFUNCTION(BlueprintCallable, Category = "Vehicle Entry|Manager")
+    void SetVehicleTypeImageDataTable(UDataTable* DataTable) { VehicleTypeImageDataTable = DataTable; }
+
+    //----------------------------------------------------------
     // Manual Updates
     //----------------------------------------------------------
 
-    /** Force refresh the entry display */
-    UFUNCTION(BlueprintCallable, Category = "Vehicle Entry")
-    void RefreshDisplay();
+
+
+
 
     //----------------------------------------------------------
     // Events (Blueprint Implementable)
@@ -119,9 +151,6 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Events")
     void OnSelectionStateChanged(bool bSelected);
 
-    /** Called when vehicle status changes */
-    UFUNCTION(BlueprintImplementableEvent, Category = "Events")
-    void OnStatusChanged(const FString& NewStatus, FLinearColor StatusColor);
 
 protected:
     //----------------------------------------------------------
@@ -132,11 +161,13 @@ protected:
     UPROPERTY()
     TObjectPtr<URealGazeboVehicleListItem> VehicleListItem;
 
-    /** Current selection state */
+    /** Current ListView selection state */
     bool bIsSelected;
 
-    /** Timer for regular updates */
-    FTimerHandle UpdateTimerHandle;
+    /** Data table containing vehicle type images (set by manager) */
+    UPROPERTY()
+    TObjectPtr<UDataTable> VehicleTypeImageDataTable;
+
 
 
     //----------------------------------------------------------
@@ -164,24 +195,15 @@ protected:
     /** Update status display */
     void UpdateStatusDisplay();
 
-    /** Format position for display */
-    FString FormatPositionText(const FVector& Position) const;
+    /** Update vehicle type image display */
+    void UpdateVehicleTypeImage();
 
-    //----------------------------------------------------------
-    // Event Handlers
-    //----------------------------------------------------------
+    /** Update selection image based on ListView selection state */
+    void UpdateSelectionImage();
 
-    /** Handle regular data updates */
-    void OnUpdateTimer();
+    /** Get vehicle type image from data table by vehicle type code */
+    UTexture2D* GetVehicleTypeImageFromDataTable(uint8 VehicleTypeCode) const;
 
-    //----------------------------------------------------------
-    // Utility Methods
-    //----------------------------------------------------------
 
-    /** Start the update timer */
-    void StartUpdateTimer();
-
-    /** Stop the update timer */
-    void StopUpdateTimer();
 
 };

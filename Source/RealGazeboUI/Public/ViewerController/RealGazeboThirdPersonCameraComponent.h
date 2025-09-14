@@ -1,0 +1,130 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+//
+// Licensed under the MIT License.
+// See LICENSE file in the project root for full license information.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Camera/CameraComponent.h"
+#include "RealGazeboThirdPersonCameraComponent.generated.h"
+
+/**
+ * Third Person Camera Component for RealGazebo vehicles
+ *
+ * Visual spring arm component with integrated camera for chase camera functionality.
+ * This IS a spring arm component with built-in camera - appears as single component in Blueprint.
+ * Users can see and position this in Blueprint editor as one integrated component.
+ *
+ * Features:
+ * - Visual spring arm component with integrated camera in Blueprint viewport
+ * - Built-in chase camera functionality with all spring arm features
+ * - User-configurable camera and spring arm settings
+ * - Tag-based discovery by camera controller
+ * - Blueprint events for activation/deactivation
+ */
+UCLASS(BlueprintType, Blueprintable, ClassGroup=(Camera), meta=(BlueprintSpawnableComponent, DisplayName="RealGazebo Third Person Camera"))
+class REALGAZEBOUI_API URealGazeboThirdPersonCameraComponent : public USpringArmComponent
+{
+    GENERATED_BODY()
+
+public:
+    URealGazeboThirdPersonCameraComponent();
+
+    //----------------------------------------------------------
+    // Component Lifecycle
+    //----------------------------------------------------------
+
+    virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+    //----------------------------------------------------------
+    // Camera Settings (User Configurable)
+    //----------------------------------------------------------
+
+    /** Field of view for the camera */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Settings", meta = (ClampMin = "5.0", ClampMax = "170.0"))
+    float CameraFieldOfView = 90.0f;
+
+    //----------------------------------------------------------
+    // Spring Arm Settings (User Configurable)
+    //----------------------------------------------------------
+    // Note: Spring arm settings are inherited from USpringArmComponent
+    // Additional settings can be configured here
+
+    /** Configure spring arm for different vehicle types */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vehicle Configuration")
+    bool bAutoConfigureForVehicle = true;
+
+    //----------------------------------------------------------
+    // Camera Control
+    //----------------------------------------------------------
+
+    /** Activate this camera (called by camera controller) */
+    UFUNCTION(BlueprintCallable, Category = "Third Person Camera")
+    void ActivateCamera();
+
+    /** Deactivate this camera (called by camera controller) */
+    UFUNCTION(BlueprintCallable, Category = "Third Person Camera")
+    void DeactivateCamera();
+
+    /** Check if camera is currently active */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Third Person Camera")
+    bool IsCameraActive() const { return bCameraActive; }
+
+    /** Get the internal camera component */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Third Person Camera")
+    UCameraComponent* GetCameraComponent() const { return CameraComponent; }
+
+    //----------------------------------------------------------
+    // Spring Arm Control
+    //----------------------------------------------------------
+
+    /** Configure spring arm settings for different vehicle types */
+    UFUNCTION(BlueprintCallable, Category = "Third Person Camera")
+    void ConfigureForVehicleType(float ArmLength = 400.0f, const FVector& ArmOffset = FVector(0.0f, 0.0f, 50.0f));
+
+    //----------------------------------------------------------
+    // Blueprint Events
+    //----------------------------------------------------------
+
+    /** Called when camera is activated */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Events")
+    void OnCameraActivated();
+
+    /** Called when camera is deactivated */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Events")
+    void OnCameraDeactivated();
+
+protected:
+    //----------------------------------------------------------
+    // Components
+    //----------------------------------------------------------
+
+    /** Internal camera component attached to spring arm */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UCameraComponent> CameraComponent;
+
+    //----------------------------------------------------------
+    // Internal State
+    //----------------------------------------------------------
+
+    /** Whether this camera is currently active */
+    UPROPERTY(BlueprintReadOnly, Category = "Runtime")
+    bool bCameraActive = false;
+
+private:
+    //----------------------------------------------------------
+    // Internal Methods
+    //----------------------------------------------------------
+
+    /** Configure camera settings */
+    void ConfigureCameraSettings();
+
+    /** Configure spring arm settings */
+    void ConfigureSpringArmSettings();
+};

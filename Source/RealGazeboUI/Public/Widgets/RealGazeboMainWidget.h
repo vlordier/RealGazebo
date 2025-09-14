@@ -1,10 +1,17 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+//
+// Licensed under the MIT License.
+// See LICENSE file in the project root for full license information.
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/ListView.h"
 #include "Components/TextBlock.h"
-#include "Components/ProgressBar.h"
 #include "Engine/World.h"
 #include "GazeboBridgeTypes.h"
 #include "GazeboBridgeSubsystem.h"
@@ -13,15 +20,17 @@
 
 // Forward declarations
 class UGazeboBridgeSubsystem;
+class ARealGazeboViewerDirector;
 
 /**
  * Main RealGazebo monitoring widget with vehicle ListView
- * 
+ *
  * Features:
  * - Real-time vehicle monitoring with ListView
- * - Connection status and statistics
- * - Dynamic vehicle addition/removal
- * - Performance optimized updates
+ * - Connection status tracking
+ * - Dynamic vehicle addition/removal with recycling support
+ * - ListView native selection with image-based visual feedback
+ * - Optimized updates (30Hz default)
  */
 UCLASS(BlueprintType, Blueprintable)
 class REALGAZEBOUI_API URealGazeboMainWidget : public UUserWidget
@@ -47,10 +56,6 @@ protected:
     /** Main vehicle ListView */
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UListView> VehicleListView;
-
-
-
-
 
 public:
     //----------------------------------------------------------
@@ -91,6 +96,38 @@ public:
     void RefreshVehicleList();
 
     //----------------------------------------------------------
+    // Vehicle Selection Management
+    //----------------------------------------------------------
+
+    /** Set the currently selected vehicle (single selection) */
+    UFUNCTION(BlueprintCallable, Category = "Vehicle Selection")
+    void SetSelectedVehicle(FVehicleID VehicleID);
+
+    /** Clear vehicle selection */
+    UFUNCTION(BlueprintCallable, Category = "Vehicle Selection")
+    void ClearVehicleSelection();
+
+    /** Get the currently selected vehicle ID */
+    UFUNCTION(BlueprintCallable, Category = "Vehicle Selection")
+    FVehicleID GetSelectedVehicleID() const { return CurrentSelectedVehicleID; }
+
+    /** Get the vehicle ListView widget */
+    UFUNCTION(BlueprintCallable, Category = "Vehicle List")
+    UListView* GetVehicleListView() const { return VehicleListView; }
+
+    //----------------------------------------------------------
+    // Manager Integration
+    //----------------------------------------------------------
+
+    /** Configure vehicle type images for all vehicle entry widgets (called by manager) */
+    UFUNCTION(BlueprintCallable, Category = "Vehicle List|Manager")
+    void SetVehicleTypeImageDataTable(UDataTable* DataTable);
+
+    /** Set the ViewerDirector reference for camera integration (called by manager) */
+    UFUNCTION(BlueprintCallable, Category = "Vehicle List|Manager")
+    void SetViewerDirector(ARealGazeboViewerDirector* InViewerDirector);
+
+    //----------------------------------------------------------
     // Events (Blueprint Implementable)
     //----------------------------------------------------------
 
@@ -98,6 +135,9 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Events")
     void OnVehicleSelected(URealGazeboVehicleListItem* SelectedVehicle);
 
+    /** Called when camera target changes for first/third person modes */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Events|Camera")
+    void OnCameraTargetChanged(URealGazeboVehicleListItem* TargetVehicle);
 
     /** Called when the connection status changes */
     UFUNCTION(BlueprintImplementableEvent, Category = "Events")
@@ -111,6 +151,9 @@ protected:
     /** Reference to the bridge subsystem */
     TWeakObjectPtr<UGazeboBridgeSubsystem> BridgeSubsystem;
 
+    /** Reference to the viewer director for camera integration */
+    TWeakObjectPtr<ARealGazeboViewerDirector> ViewerDirector;
+
     /** Map of vehicle IDs to list items for fast lookup */
     TMap<FVehicleID, TObjectPtr<URealGazeboVehicleListItem>> VehicleItemMap;
 
@@ -122,6 +165,13 @@ protected:
 
     /** Last connection status */
     bool bLastConnectionStatus;
+
+    /** Currently selected vehicle ID for single selection */
+    FVehicleID CurrentSelectedVehicleID;
+
+    /** Data table containing vehicle type images (set by manager) */
+    UPROPERTY()
+    TObjectPtr<UDataTable> VehicleTypeImageDataTable;
 
     //----------------------------------------------------------
     // Internal Methods
@@ -149,6 +199,10 @@ protected:
     /** Generate vehicle display name */
     FString GenerateVehicleDisplayName(const FVehicleID& VehicleID, uint8 VehicleType) const;
 
+    /** Find vehicle pawn by ID for camera integration */
+    class AVehicleBasePawn* FindVehiclePawnByID(const FVehicleID& VehicleID) const;
+
+
     //----------------------------------------------------------
     // ListView Event Handlers
     //----------------------------------------------------------
@@ -157,17 +211,8 @@ protected:
     UFUNCTION()
     void OnVehicleItemSelectionChanged(UObject* SelectedItem);
 
+    /** Handle entry widget generation/recycling for proper selection state */
+    void OnEntryWidgetGenerated(UUserWidget& GeneratedWidget);
 
-public:
-    //----------------------------------------------------------
-    // Static Utility Methods
-    //----------------------------------------------------------
 
-    /** Create and show the main widget */
-    UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI", meta = (CallInEditor = "true"))
-    static URealGazeboMainWidget* CreateMainWidget(UObject* WorldContext);
-
-    /** Get the current main widget instance (if any) */
-    UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI")
-    static URealGazeboMainWidget* GetMainWidget(UObject* WorldContext);
 };

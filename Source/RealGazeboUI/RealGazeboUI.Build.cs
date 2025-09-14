@@ -1,25 +1,22 @@
 using UnrealBuildTool;
+using System.IO;
 
 public class RealGazeboUI : ModuleRules
 {
 	public RealGazeboUI(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-		
-		// Public include paths for external access
-		PublicIncludePaths.AddRange(new string[] {
-			"RealGazeboUI/Public",
-			"RealGazeboUI/Public/Widgets",
-			"RealGazeboUI/Public/Data",
-		});
-				
-		// Private include paths for internal implementation
-		PrivateIncludePaths.AddRange(new string[] {
-			"RealGazeboUI/Private",
-			"RealGazeboUI/Private/Widgets",
-			"RealGazeboUI/Private/Data",
-		});
-			
+
+		// Public include paths
+        	PublicIncludePaths.AddRange(
+            new string[] {
+			Path.Combine(ModuleDirectory, "Public", "Core"),
+			Path.Combine(ModuleDirectory, "Public", "Data"),
+			Path.Combine(ModuleDirectory, "Public", "ViewerController"),
+			Path.Combine(ModuleDirectory, "Public", "Widgets")
+			}
+		);
+
 		// Core runtime dependencies
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core",
@@ -29,63 +26,28 @@ public class RealGazeboUI : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"HTTP",
-			"Json",
-			"JsonUtilities",
 			"RealGazeboBridge"
 		});
-			
+
 		// Private implementation dependencies
 		PrivateDependencyModuleNames.AddRange(new string[] {
-			"ApplicationCore",
-			"RenderCore",
-			"RHI"
+			"ApplicationCore"
 		});
 		
 		// Editor-specific dependencies
 		if (Target.bBuildEditor)
 		{
 			PublicDependencyModuleNames.AddRange(new string[] {
-				"EditorStyle",
-				"EditorWidgets",
 				"UnrealEd",
-				"ToolMenus",
-				"WorkspaceMenuStructure",
-				"PropertyEditor",
-				"BlueprintGraph",
-				"KismetCompiler",
-				"DesktopPlatform"
+				"ToolMenus"
 			});
 			
 			PrivateDependencyModuleNames.AddRange(new string[] {
-				"DesktopWidgets",
-				"GraphEditor",
-				"Kismet",
-				"KismetWidgets",
-				"AssetTools",
-				"ContentBrowser",
-				"LevelEditor",
-				"MainFrame",
-				"Projects",
-				"Persona",
-				"AnimGraph"
+				"Projects"
 			});
 		}
 		
-		// Platform-specific configurations
-		if (Target.Platform == UnrealTargetPlatform.Linux)
-		{
-			PrivateDependencyModuleNames.AddRange(new string[] {
-				"UnixCommonStartup"
-			});
-		}
-		else if (Target.Platform == UnrealTargetPlatform.Win64)
-		{
-			PrivateDependencyModuleNames.AddRange(new string[] {
-				"D3D12RHI",
-				"D3D11RHI"
-			});
-		}
+		// No platform-specific dependencies needed for UI widgets
 		
 		DynamicallyLoadedModuleNames.AddRange(new string[] {
 			// Reserved for future dynamic module loading

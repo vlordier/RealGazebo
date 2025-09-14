@@ -8,20 +8,23 @@ public class RealGazeboStreaming : ModuleRules
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
         // Public include paths for streaming interfaces
-        PublicIncludePaths.AddRange(new string[] {
-            Path.Combine(ModuleDirectory, "Public"),
+        PublicIncludePaths.AddRange(
+            new string[] {
             Path.Combine(ModuleDirectory, "Public", "Capture"),
             Path.Combine(ModuleDirectory, "Public", "Streaming"),
+            Path.Combine(ModuleDirectory, "Private", "Processors"),
             Path.Combine(ModuleDirectory, "Public", "Interfaces")
-        });
+            }
+        );
         
         // Private include paths for implementation
-        PrivateIncludePaths.AddRange(new string[] {
-            Path.Combine(ModuleDirectory, "Private"),
+        PrivateIncludePaths.AddRange(
+            new string[] {
             Path.Combine(ModuleDirectory, "Private", "Capture"),
             Path.Combine(ModuleDirectory, "Private", "Streaming"),
             Path.Combine(ModuleDirectory, "Private", "Processors")
-        });
+            }
+        );
 
         // Core runtime dependencies for streaming
         PublicDependencyModuleNames.AddRange(new string[]
