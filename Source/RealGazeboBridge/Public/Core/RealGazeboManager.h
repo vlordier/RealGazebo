@@ -69,9 +69,10 @@ public:
               meta = (DisplayName = "Listen Port", DisplayPriority = "1"))
     int32 ListenPort = 5005;
 
-    /** Server IP Address (empty = all interfaces) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Network", 
-              meta = (DisplayName = "Server IP Address", DisplayPriority = "2"))
+    /** Server IP Address (empty = accept from all IPs, specific IP = filter for that IP only) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Network",
+              meta = (DisplayName = "Server IP Address", DisplayPriority = "2",
+                     ToolTip = "Leave empty to accept UDP packets from any IP address. Set specific IP (e.g. 192.168.168.100) to only accept packets from that source."))
     FString ServerIPAddress = TEXT("127.0.0.1");
 
     /** Process UDP packets in batches for better performance */
