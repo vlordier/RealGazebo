@@ -10,8 +10,6 @@
 #include "Core/GazeboBridgeSubsystem.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
-#include "Components/BillboardComponent.h"
-#include "Components/ArrowComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRealGazeboManager, Log, All);
 
@@ -19,25 +17,6 @@ ARealGazeboManager::ARealGazeboManager()
 {
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.TickInterval = 1.0f; // Update status every second
-
-    // Create root component for visibility in editor
-    RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
-
-    // Add billboard for easy identification in editor
-    if (UBillboardComponent* BillboardComponent = CreateDefaultSubobject<UBillboardComponent>(TEXT("Billboard")))
-    {
-        BillboardComponent->SetupAttachment(RootComponent);
-        BillboardComponent->bIsEditorOnly = true;
-    }
-
-    // Add arrow to show "direction" of communication
-    if (UArrowComponent* ArrowComponent = CreateDefaultSubobject<UArrowComponent>(TEXT("Arrow")))
-    {
-        ArrowComponent->SetupAttachment(RootComponent);
-        ArrowComponent->bIsEditorOnly = true;
-        ArrowComponent->ArrowLength = 100.0f;
-        ArrowComponent->ArrowSize = 2.0f;
-    }
 }
 
 void ARealGazeboManager::BeginPlay()

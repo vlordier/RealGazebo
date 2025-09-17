@@ -73,7 +73,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Network",
               meta = (DisplayName = "Server IP Address", DisplayPriority = "2",
                      ToolTip = "Leave empty to accept UDP packets from any IP address. Set specific IP (e.g. 192.168.168.100) to only accept packets from that source."))
-    FString ServerIPAddress = TEXT("127.0.0.1");
+    FString ServerIPAddress = TEXT("");
 
     /** Process UDP packets in batches for better performance */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Network|Processing", 
