@@ -28,10 +28,18 @@ UVehiclePoolManager::UVehiclePoolManager()
 
 void UVehiclePoolManager::InitializePool(UWorld* InWorld)
 {
+    // Skip re-initialization if already initialized with a valid world
+    if (CachedWorld.IsValid() && CachedWorld.Get() == InWorld)
+    {
+        UE_LOG(LogRealGazeboBridge, Verbose, TEXT("VehiclePoolManager already initialized for this world"));
+        return;
+    }
+
     CachedWorld = InWorld;
-    
-    UE_LOG(LogRealGazeboBridge, Display, TEXT("VehiclePoolManager: Initializing object pools"));
-    
+
+    UE_LOG(LogRealGazeboBridge, Display, TEXT("VehiclePoolManager: Initializing object pools for world: %s"),
+           InWorld ? *InWorld->GetName() : TEXT("NULL"));
+
     // Clear existing pools
     AvailablePawnPools.Empty();
     ActivePawnPools.Empty();
@@ -87,6 +95,7 @@ void UVehiclePoolManager::ShutdownPool()
     }
     
     // Clear all data structures
+
     AvailablePawnPools.Empty();
     ActivePawnPools.Empty();
     PawnToTypeMap.Empty();

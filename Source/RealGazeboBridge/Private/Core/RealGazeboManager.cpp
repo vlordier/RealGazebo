@@ -25,12 +25,19 @@ void ARealGazeboManager::BeginPlay()
 
     // Get reference to the subsystem
     BridgeSubsystem = UGazeboBridgeSubsystem::GetBridgeSubsystem(this);
-    
+
     if (!BridgeSubsystem.IsValid())
     {
         UE_LOG(LogRealGazeboManager, Error, TEXT("Failed to get GazeboBridgeSubsystem! Make sure the plugin is properly loaded."));
         return;
     }
+
+    UE_LOG(LogRealGazeboManager, Log, TEXT("RealGazeboManager BeginPlay - Subsystem: %s, DataTable: %s"),
+           BridgeSubsystem.IsValid() ? TEXT("Valid") : TEXT("Invalid"),
+           VehicleDataTable ? *VehicleDataTable->GetName() : TEXT("NULL"));
+
+    // Ensure data table is loaded before validation
+    EnsureDataTableLoaded();
 
     // Validate configuration
     if (!ValidateConfiguration())
@@ -95,6 +102,9 @@ void ARealGazeboManager::StartBridge()
         UE_LOG(LogRealGazeboManager, Error, TEXT("Cannot start bridge - subsystem not available"));
         return;
     }
+
+    // Ensure data table is loaded before validation
+    EnsureDataTableLoaded();
 
     if (!ValidateConfiguration())
     {
@@ -188,6 +198,9 @@ void ARealGazeboManager::ConfigureSubsystem()
     // Configure vehicle data table
     BridgeSubsystem->VehicleConfigTable = VehicleDataTable;
 
+    UE_LOG(LogRealGazeboManager, Log, TEXT("Configured subsystem with Vehicle Data Table: %s"),
+           VehicleDataTable ? *VehicleDataTable->GetName() : TEXT("NULL"));
+
     // Configure Vehicle Pool Settings
     ConfigureVehiclePoolSettings();
 
@@ -257,6 +270,27 @@ void ARealGazeboManager::ConfigurePerformanceAndDebugSettings()
     
     UE_LOG(LogRealGazeboManager, Verbose, TEXT("Performance settings configured - MaxActive: %d, UpdateRate: %.1f Hz"), 
            MaxActiveVehicles, UpdateFrequency);
+}
+
+void ARealGazeboManager::EnsureDataTableLoaded()
+{
+    // Check if DataTable is set
+    if (!VehicleDataTable)
+    {
+        UE_LOG(LogRealGazeboManager, Warning, TEXT("No Vehicle Data Table specified. Attempting to load default..."));
+
+        // Try to load the default data table
+        VehicleDataTable = LoadObject<UDataTable>(nullptr, TEXT("/RealGazebo/DataTables/Base_UI/DT_VehicleConfig_UI.DT_VehicleConfig_UI"));
+
+        if (!VehicleDataTable)
+        {
+            UE_LOG(LogRealGazeboManager, Error, TEXT("Failed to load default Vehicle Data Table. Bridge cannot start without vehicle configuration."));
+        }
+        else
+        {
+            UE_LOG(LogRealGazeboManager, Log, TEXT("Successfully loaded default Vehicle Data Table: %s"), *VehicleDataTable->GetName());
+        }
+    }
 }
 
 bool ARealGazeboManager::ValidateConfiguration() const

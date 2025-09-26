@@ -43,10 +43,7 @@ void UGazeboBridgeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     }
     
     VehiclePool = NewObject<UVehiclePoolManager>(this);
-    if (VehiclePool)
-    {
-        VehiclePool->InitializePool(GetWorld());
-    }
+    // Note: VehiclePool initialization is deferred until StartBridge() when a valid world is available
     
     UE_LOG(LogRealGazeboBridge, Display, TEXT("Subsystem initialized"));
 }
@@ -93,11 +90,26 @@ void UGazeboBridgeSubsystem::StartBridge()
         return;
     }
     
+    // Initialize VehiclePool with valid world reference if not already initialized
+    if (VehiclePool)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            VehiclePool->InitializePool(World);
+            UE_LOG(LogRealGazeboBridge, Display, TEXT("VehiclePool initialized with world: %s"), *World->GetName());
+        }
+        else
+        {
+            UE_LOG(LogRealGazeboBridge, Error, TEXT("Cannot initialize VehiclePool - no valid world"));
+            return;
+        }
+    }
+
     // Start network processing
     if (StreamProcessor->StartDataStream(ListenPort, ServerIPAddress))
     {
         bIsBridgeActive = true;
-        
+
         // Setup update timer for batch processing
         if (UWorld* World = GetWorld())
         {
