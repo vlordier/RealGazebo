@@ -233,9 +233,6 @@ protected:
     /** Validate configuration */
     bool ValidateConfiguration() const;
 
-    /** Ensure the vehicle data table is loaded (loads default if null) */
-    void EnsureDataTableLoaded();
-
     /** Reference to the subsystem we're controlling */
     UPROPERTY()
     TWeakObjectPtr<UGazeboBridgeSubsystem> BridgeSubsystem;

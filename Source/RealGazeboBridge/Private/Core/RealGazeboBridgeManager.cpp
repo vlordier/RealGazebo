@@ -24,19 +24,12 @@ void ARealGazeboBridgeManager::BeginPlay()
 
     // Get reference to the subsystem
     BridgeSubsystem = UGazeboBridgeSubsystem::GetBridgeSubsystem(this);
-
+    
     if (!BridgeSubsystem.IsValid())
     {
         UE_LOG(LogRealGazeboBridgeManager, Error, TEXT("Failed to get GazeboBridgeSubsystem! Make sure the plugin is properly loaded."));
         return;
     }
-
-    UE_LOG(LogRealGazeboBridgeManager, Log, TEXT("RealGazeboBridgeManager BeginPlay - Subsystem: %s, DataTable: %s"),
-           BridgeSubsystem.IsValid() ? TEXT("Valid") : TEXT("Invalid"),
-           VehicleDataTable ? *VehicleDataTable->GetName() : TEXT("NULL"));
-
-    // Ensure data table is loaded before validation
-    EnsureDataTableLoaded();
 
     // Validate configuration
     if (!ValidateConfiguration())
@@ -101,9 +94,6 @@ void ARealGazeboBridgeManager::StartBridge()
         UE_LOG(LogRealGazeboBridgeManager, Error, TEXT("Cannot start bridge - subsystem not available"));
         return;
     }
-
-    // Ensure data table is loaded before validation
-    EnsureDataTableLoaded();
 
     if (!ValidateConfiguration())
     {
@@ -196,9 +186,6 @@ void ARealGazeboBridgeManager::ConfigureSubsystem()
 
     // Configure vehicle data table
     BridgeSubsystem->VehicleConfigTable = VehicleDataTable;
-
-    UE_LOG(LogRealGazeboManager, Log, TEXT("Configured subsystem with Vehicle Data Table: %s"),
-           VehicleDataTable ? *VehicleDataTable->GetName() : TEXT("NULL"));
 
     // Configure Vehicle Pool Settings
     ConfigureVehiclePoolSettings();

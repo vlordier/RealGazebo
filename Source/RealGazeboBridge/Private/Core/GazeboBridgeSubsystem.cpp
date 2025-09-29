@@ -42,7 +42,10 @@ void UGazeboBridgeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     }
     
     VehiclePool = NewObject<UVehiclePoolManager>(this);
-    // Note: VehiclePool initialization is deferred until StartBridge() when a valid world is available
+    if (VehiclePool)
+    {
+        VehiclePool->InitializePool(GetWorld());
+    }
     
     UE_LOG(LogRealGazeboBridge, Display, TEXT("Subsystem initialized"));
 }
@@ -108,7 +111,7 @@ void UGazeboBridgeSubsystem::StartBridge()
     if (StreamProcessor->StartDataStream(ListenPort, ServerIPAddress))
     {
         bIsBridgeActive = true;
-
+        
         // Setup update timer for batch processing
         if (UWorld* World = GetWorld())
         {
