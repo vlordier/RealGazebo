@@ -1,0 +1,431 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+// Licensed under the BSD-3-Clause License.
+// See LICENSE file in the project root for full license information.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "Engine/DataTable.h"
+#include "GazeboBridgeTypes.h"
+#include "Data/VehicleTypeImageData.h"
+#include "RealGazeboManager.generated.h"
+
+// Forward declarations
+class UGazeboBridgeSubsystem;
+class URealGazeboUISubsystem;
+class ARealGazeboViewerDirector;
+
+/**
+ * Unified RealGazebo Manager Actor
+ *
+ * Combines RealGazeboBridgeManager + RealGazeboCameraUIManager into a single
+ * comprehensive management solution for complete plug-and-play usage.
+ *
+ * This provides the OLD VERSION drag-and-drop experience while leveraging
+ * the high-performance v2.0 subsystem architecture underneath.
+ *
+ * Key Features:
+ * - Complete Bridge + UI management in one actor
+ * - Drag-and-drop into level (like Old Version)
+ * - Visual configuration in Details panel
+ * - Plug-and-play - no project settings needed
+ * - Automatic subsystem coordination
+ * - Comprehensive event system
+ * - Advanced performance tuning
+ */
+UCLASS(BlueprintType, Blueprintable, meta = (DisplayName = "RealGazebo Manager"))
+class REALGAZEBO_API ARealGazeboManager : public AActor
+{
+    GENERATED_BODY()
+
+public:
+    ARealGazeboManager();
+
+    //----------------------------------------------------------
+    // Essential Configuration - Core Data Tables
+    //----------------------------------------------------------
+
+    /** Vehicle Configuration DataTable for bridge operations */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo",
+              meta = (DisplayName = "Vehicle Data Table", DisplayPriority = "1",
+                     ToolTip = "DataTable containing vehicle configurations for bridge operations"))
+    TObjectPtr<UDataTable> VehicleDataTable;
+
+    /** Vehicle Type Images DataTable for UI icons and display */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo",
+              meta = (DisplayName = "Vehicle Type Images DataTable", DisplayPriority = "2",
+                     ToolTip = "DataTable containing vehicle type codes and their corresponding images for UI"))
+    TObjectPtr<UDataTable> VehicleTypeImageDataTable;
+
+    /** Main Widget Class for UI management */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo",
+              meta = (DisplayName = "Main Widget Class", DisplayPriority = "3",
+                     ToolTip = "Widget class to create for the main UI. Must be set manually (e.g., WBP_RealGazeboMain)."))
+    TSubclassOf<UUserWidget> MainWidgetClass;
+
+    //----------------------------------------------------------
+    // Bridge Configuration - Network & Vehicle Management
+    //----------------------------------------------------------
+
+    /** Auto-start bridge when level begins */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge",
+              meta = (DisplayName = "Auto Start Bridge", DisplayPriority = "1"))
+    bool bAutoStartBridge = true;
+
+    /** Automatically spawn vehicles when data is received */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge",
+              meta = (DisplayName = "Auto Spawn Vehicles", DisplayPriority = "2"))
+    bool bAutoSpawnVehicles = true;
+
+    /** UDP Listen Port */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Network",
+              meta = (DisplayName = "Listen Port", DisplayPriority = "3", ClampMin = "1024", ClampMax = "65535"))
+    int32 ListenPort = 5005;
+
+    /** Server IP Address (empty = accept from all IPs, specific IP = filter for that IP only) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Network",
+              meta = (DisplayName = "Server IP Address", DisplayPriority = "2",
+                     ToolTip = "Leave empty to accept UDP packets from any IP address. Set specific IP (e.g. 192.168.168.100) to only accept packets from that source."))
+    FString ServerIPAddress = TEXT("");
+
+    /** Process UDP packets in batches for better performance */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Network|Processing",
+              meta = (DisplayName = "Enable Batch Processing", DisplayPriority = "1"))
+    bool bEnableBatchProcessing = true;
+
+    /** Number of packets to process per batch */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Network|Processing",
+              meta = (DisplayName = "Batch Size", DisplayPriority = "2", ClampMin = "1", ClampMax = "100", EditCondition = "bEnableBatchProcessing"))
+    int32 BatchSize = 10;
+
+    /** Batch processing interval in seconds (affects responsiveness) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Network|Processing",
+              meta = (DisplayName = "Batch Processing Interval", DisplayPriority = "3", ClampMin = "0.001", ClampMax = "0.1", EditCondition = "bEnableBatchProcessing", AdvancedDisplay))
+    float BatchProcessingInterval = 0.016f; // ~60 FPS
+
+    /** Validate packet sizes against expected protocol */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Network",
+              meta = (DisplayName = "Validate Packet Sizes", DisplayPriority = "1", AdvancedDisplay))
+    bool bValidatePacketSizes = true;
+
+    /** Update frequency in Hz */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Core",
+              meta = (DisplayName = "Update Frequency", DisplayPriority = "1", ClampMin = "10.0", ClampMax = "120.0"))
+    float UpdateFrequency = 60.0f;
+
+    /** Maximum number of active vehicles allowed simultaneously */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Limits",
+              meta = (DisplayName = "Max Active Vehicles", DisplayPriority = "1", ClampMin = "1", ClampMax = "255"))
+    int32 MaxActiveVehicles = 255;
+
+    /** Use asynchronous processing for network data */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Limits",
+              meta = (DisplayName = "Use Async Processing", DisplayPriority = "3", AdvancedDisplay))
+    bool bUseAsyncProcessing = true;
+
+    /** Maximum actors per vehicle type in the pool */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
+              meta = (DisplayName = "Max Actors Per Type", DisplayPriority = "1", ClampMin = "10", ClampMax = "255"))
+    int32 MaxActorsPerType = 100;
+
+    /** Initial pool size per vehicle type */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
+              meta = (DisplayName = "Initial Pool Size", DisplayPriority = "2", ClampMin = "5", ClampMax = "100"))
+    int32 InitialPoolSize = 10;
+
+    /** Auto-expand pools when more vehicles are needed */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
+              meta = (DisplayName = "Auto Expand Pools", DisplayPriority = "3"))
+    bool bAutoExpandPools = true;
+
+    /** Pool expansion increment size */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
+              meta = (DisplayName = "Pool Expansion Size", DisplayPriority = "4", ClampMin = "1", ClampMax = "50", EditCondition = "bAutoExpandPools"))
+    int32 PoolExpansionSize = 5;
+
+    /** Auto-shrink unused pools to save memory */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
+              meta = (DisplayName = "Auto Shrink Pools", DisplayPriority = "5", AdvancedDisplay))
+    bool bAutoShrinkPools = false;
+
+    /** Time before unused actors are removed from pools (seconds) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
+              meta = (DisplayName = "Unused Actor Timeout", DisplayPriority = "6", ClampMin = "10.0", ClampMax = "300.0", EditCondition = "bAutoShrinkPools", AdvancedDisplay))
+    float UnusedActorTimeout = 30.0f;
+
+    /** Enable smooth movement interpolation for all vehicles */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Vehicles|Movement",
+              meta = (DisplayName = "Default Smooth Movement", DisplayPriority = "1"))
+    bool bDefaultSmoothMovement = true;
+
+    /** Default interpolation speed for vehicle movement */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Vehicles|Movement",
+              meta = (DisplayName = "Default Interpolation Speed", DisplayPriority = "2", ClampMin = "1.0", ClampMax = "100.0", EditCondition = "bDefaultSmoothMovement"))
+    float DefaultInterpolationSpeed = 15.0f;
+
+    //----------------------------------------------------------
+    // UI Camera Configuration - Camera & Widget Management
+    //----------------------------------------------------------
+
+    /** Auto-create and show UI when level begins */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|UI Camera",
+              meta = (DisplayName = "Auto Create UI", DisplayPriority = "1"))
+    bool bAutoCreateUI = true;
+
+    /** Auto-add widget to viewport */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|UI Camera",
+              meta = (DisplayName = "Auto Add to Viewport", DisplayPriority = "2"))
+    bool bAutoAddToViewport = true;
+
+    /** Auto-create viewer director for camera control */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|UI Camera",
+              meta = (DisplayName = "Auto Create Viewer Director", DisplayPriority = "3"))
+    bool bAutoCreateViewerDirector = true;
+
+    /** Initial location for DefaultPawn when system starts */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|UI Camera|Camera Settings",
+              meta = (DisplayName = "Initial Camera Location", DisplayPriority = "1",
+                     ToolTip = "Starting position for DefaultPawn camera"))
+    FVector InitialCameraLocation = FVector(0.0f, 0.0f, 500.0f);
+
+    /** Initial rotation for DefaultPawn when system starts */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|UI Camera|Camera Settings",
+              meta = (DisplayName = "Initial Camera Rotation", DisplayPriority = "2",
+                     ToolTip = "Starting rotation for DefaultPawn camera"))
+    FRotator InitialCameraRotation = FRotator(-20.0f, 0.0f, 0.0f);
+
+    /** Z-order for the widget when added to viewport */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|UI Camera|UI Settings",
+              meta = (DisplayName = "Widget Z-Order", DisplayPriority = "1", ClampMin = "0"))
+    int32 WidgetZOrder = 0;
+
+    /** Always show mouse cursor regardless of camera mode or UI state */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|UI Camera|UI Settings",
+              meta = (DisplayName = "Always Show Mouse Cursor", DisplayPriority = "2",
+                     ToolTip = "Keep mouse cursor visible at all times for UI interaction"))
+    bool bAlwaysShowMouseCursor = true;
+
+    //----------------------------------------------------------
+    // Bridge Control API
+    //----------------------------------------------------------
+
+    /** Start the bridge (manual control) */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Bridge Control", meta = (DisplayName = "Start Bridge"))
+    void StartBridge();
+
+    /** Stop the bridge */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Bridge Control", meta = (DisplayName = "Stop Bridge"))
+    void StopBridge();
+
+    /** Check if bridge is running */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Bridge Control", meta = (DisplayName = "Is Bridge Active"))
+    bool IsBridgeActive() const;
+
+    /** Clear all spawned vehicles */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Bridge Control", meta = (DisplayName = "Clear All Vehicles"))
+    void ClearAllVehicles();
+
+    //----------------------------------------------------------
+    // UI Control API
+    //----------------------------------------------------------
+
+    /** Create the main widget with proper configuration */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI Control", meta = (DisplayName = "Create Main Widget"))
+    UUserWidget* CreateMainWidget();
+
+    /** Add the main widget to viewport */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI Control", meta = (DisplayName = "Add Widget to Viewport"))
+    void AddMainWidgetToViewport();
+
+    /** Complete UI setup in one call - creates widget and adds to viewport */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI Control", meta = (DisplayName = "Initialize Camera UI"))
+    void InitializeCameraUI();
+
+    /** Remove widget from viewport and cleanup */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI Control", meta = (DisplayName = "Cleanup Camera UI"))
+    void CleanupCameraUI();
+
+    /** Force mouse cursor visibility state */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI Control", meta = (DisplayName = "Set Mouse Always Visible"))
+    void SetMouseCursorAlwaysVisible(bool bVisible);
+
+    //----------------------------------------------------------
+    // Status Information API
+    //----------------------------------------------------------
+
+    /** Get number of active vehicles */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Status", meta = (DisplayName = "Get Vehicle Count"))
+    int32 GetActiveVehicleCount() const;
+
+    /** Get network statistics */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Status", meta = (DisplayName = "Get Network Stats"))
+    void GetNetworkStatistics(int32& OutValidPackets, int32& OutInvalidPackets, float& OutPacketsPerSecond) const;
+
+    /** Get the currently created main widget (if any) */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Status", meta = (DisplayName = "Get Main Widget"))
+    UUserWidget* GetMainWidget() const;
+
+    /** Check if UI is currently active */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Status", meta = (DisplayName = "Is UI Active"))
+    bool IsUIActive() const;
+
+    /** Get the created viewer director (if any) */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Status", meta = (DisplayName = "Get Viewer Director"))
+    ARealGazeboViewerDirector* GetViewerDirector() const;
+
+    /** Validate the current setup and return status */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Status", meta = (DisplayName = "Validate Setup"))
+    bool ValidateSetup();
+
+    //----------------------------------------------------------
+    // Camera Control API (from RealGazeboCameraUIManager)
+    //----------------------------------------------------------
+
+    /** Set camera mode */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Camera Control", meta = (DisplayName = "Set Camera Mode"))
+    void SetCameraMode(int32 NewMode);
+
+    /** Get current camera mode */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Camera Control", meta = (DisplayName = "Get Camera Mode"))
+    int32 GetCameraMode() const;
+
+    /** Show/hide main UI widget */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI Control", meta = (DisplayName = "Set Main Widget Visibility"))
+    void SetMainWidgetVisibility(bool bVisible);
+
+    //----------------------------------------------------------
+    // Events - Bridge Lifecycle
+    //----------------------------------------------------------
+
+    /** Called when bridge starts successfully */
+    UPROPERTY(BlueprintAssignable, Category = "RealGazebo|Bridge Events")
+    FOnVehicleDataReceived OnBridgeStarted;
+
+    /** Called when bridge stops */
+    UPROPERTY(BlueprintAssignable, Category = "RealGazebo|Bridge Events")
+    FOnVehicleDataReceived OnBridgeStopped;
+
+    /** Called when vehicle is spawned */
+    UPROPERTY(BlueprintAssignable, Category = "RealGazebo|Bridge Events")
+    FOnVehicleDataReceived OnVehicleSpawned;
+
+    //----------------------------------------------------------
+    // Events - UI Lifecycle (Blueprint Implementable)
+    //----------------------------------------------------------
+
+    /** Called when UI is successfully created */
+    UFUNCTION(BlueprintImplementableEvent, Category = "RealGazebo|UI Events")
+    void OnUICreated();
+
+    /** Called when UI setup fails */
+    UFUNCTION(BlueprintImplementableEvent, Category = "RealGazebo|UI Events")
+    void OnUISetupFailed(const FString& ErrorMessage);
+
+    /** Called when UI is cleaned up */
+    UFUNCTION(BlueprintImplementableEvent, Category = "RealGazebo|UI Events")
+    void OnUICleanedUp();
+
+protected:
+    //----------------------------------------------------------
+    // Actor Lifecycle
+    //----------------------------------------------------------
+
+    virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void Tick(float DeltaTime) override;
+
+#if WITH_EDITOR
+    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
+    //----------------------------------------------------------
+    // Internal State
+    //----------------------------------------------------------
+
+    /** Reference to the bridge subsystem we're controlling */
+    UPROPERTY()
+    TWeakObjectPtr<UGazeboBridgeSubsystem> BridgeSubsystem;
+
+    /** Reference to the UI subsystem we're controlling */
+    UPROPERTY()
+    TWeakObjectPtr<URealGazeboUISubsystem> UISubsystem;
+
+    /** Track if we started the bridge subsystem */
+    bool bDidStartBridge = false;
+
+    /** Track if we started the UI subsystem */
+    bool bDidStartUI = false;
+
+    /** Reference to created viewer director */
+    UPROPERTY()
+    TWeakObjectPtr<ARealGazeboViewerDirector> ViewerDirector;
+
+    //----------------------------------------------------------
+    // Status Display (Visible for Debug)
+    //----------------------------------------------------------
+
+    /** Bridge status display for debugging */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RealGazebo|Status", meta = (DisplayName = "Bridge Status"))
+    FString BridgeStatus = TEXT("Not Started");
+
+    /** Active vehicles count for display */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RealGazebo|Status", meta = (DisplayName = "Active Vehicles"))
+    int32 ActiveVehiclesCount = 0;
+
+    /** UI status display for debugging */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RealGazebo|Status", meta = (DisplayName = "UI Status"))
+    FString UIStatus = TEXT("Not Initialized");
+
+    /** Widget state for display */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RealGazebo|Status", meta = (DisplayName = "Widget In Viewport"))
+    bool WidgetInViewportStatus = false;
+
+    //----------------------------------------------------------
+    // Internal Methods
+    //----------------------------------------------------------
+
+    /** Configure the bridge subsystem with our settings */
+    void ConfigureBridgeSubsystem();
+
+    /** Configure the UI subsystem with our settings */
+    void ConfigureUISubsystem();
+
+    /** Configure vehicle pool management settings */
+    void ConfigureVehiclePoolSettings();
+
+    /** Configure network processing settings */
+    void ConfigureNetworkProcessingSettings();
+
+    /** Configure performance and debug settings */
+    void ConfigurePerformanceAndDebugSettings();
+
+    /** Get the player controller for widget operations */
+    APlayerController* GetPlayerController() const;
+
+    /** Configure Bridge subsystem pool settings */
+    void ConfigureBridgePoolSettings();
+
+    //----------------------------------------------------------
+    // Validation Methods
+    //----------------------------------------------------------
+
+    /** Validate vehicle data table configuration */
+    bool ValidateVehicleDataTable() const;
+
+    /** Validate UI configuration */
+    bool ValidateUIConfiguration() const;
+
+    /** Validate Bridge subsystem availability */
+    bool ValidateBridgeSubsystem() const;
+
+    /** Update status display */
+    void UpdateStatusDisplay();
+
+private:
+    /** Timer for periodic status updates */
+    FTimerHandle StatusUpdateTimer;
+};

@@ -2,8 +2,7 @@
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-//
-// Licensed under the MIT License.
+// Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
 
 #include "RealGazeboBridge.h"
@@ -18,11 +17,6 @@ FRealGazeboBridgeModule* FRealGazeboBridgeModule::ModuleInstance = nullptr;
 void FRealGazeboBridgeModule::StartupModule()
 {
     ModuleInstance = this;
-    
-    UE_LOG(LogRealGazeboBridge, Display, TEXT("====== RealGazeboBridge Module Startup ======"));
-    UE_LOG(LogRealGazeboBridge, Display, TEXT("Subsystem architecture ready"));
-    UE_LOG(LogRealGazeboBridge, Display, TEXT("Object pooling system available"));
-    UE_LOG(LogRealGazeboBridge, Display, TEXT("Batch processing enabled"));
 }
 
 void FRealGazeboBridgeModule::ShutdownModule()

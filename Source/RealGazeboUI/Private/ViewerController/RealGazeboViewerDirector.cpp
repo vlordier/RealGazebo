@@ -2,8 +2,7 @@
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-//
-// Licensed under the MIT License.
+// Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
 
 #include "ViewerController/RealGazeboViewerDirector.h"
@@ -36,6 +35,15 @@ void ARealGazeboViewerDirector::BeginPlay()
     {
         OriginalPawn = PC->GetPawn();
         UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Stored original UE5 DefaultPawn: %s"), *OriginalPawn->GetName());
+
+        // Disable collision immediately so manual camera can fly through walls freely
+        OriginalPawn->SetActorEnableCollision(false);
+        if (UPrimitiveComponent* RootComp = Cast<UPrimitiveComponent>(OriginalPawn->GetRootComponent()))
+        {
+            RootComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            RootComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+            UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Disabled DefaultPawn collision for free flight"));
+        }
     }
 
     InitializeForBeginPlay();
@@ -198,6 +206,14 @@ void ARealGazeboViewerDirector::SetInitialCameraSettings(const FVector& Location
         OriginalPawn->SetActorLocation(TargetLocation);
         OriginalPawn->SetActorRotation(InitialCameraRotation);
 
+        // Also update the PlayerController's control rotation for camera view
+        APlayerController* PC = GetWorld()->GetFirstPlayerController();
+        if (PC)
+        {
+            PC->SetControlRotation(InitialCameraRotation);
+            UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Updated PlayerController control rotation to match pawn rotation"));
+        }
+
         UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Applied initial camera settings to DefaultPawn - Location: %s, Rotation: %s"),
                *TargetLocation.ToString(), *InitialCameraRotation.ToString());
     }
@@ -206,6 +222,11 @@ void ARealGazeboViewerDirector::SetInitialCameraSettings(const FVector& Location
         UE_LOG(LogRealGazeboUI, Warning, TEXT("ViewerDirector: Updated initial camera settings but DefaultPawn not available yet - Location: %s, Rotation: %s"),
                *Location.ToString(), *Rotation.ToString());
     }
+}
+
+void ARealGazeboViewerDirector::RefreshVehicleList()
+{
+    DiscoverVehicles();
 }
 
 void ARealGazeboViewerDirector::SwitchToManualMode()
@@ -225,12 +246,24 @@ void ARealGazeboViewerDirector::SwitchToManualMode()
     OriginalPawn->SetActorRotation(CurrentCameraTransform.GetRotation().Rotator());
     OriginalPawn->SetActorHiddenInGame(false); // Ensure it's visible
 
+    // Disable collision so manual camera can fly through walls freely
+    OriginalPawn->SetActorEnableCollision(false);
+    if (UPrimitiveComponent* RootComp = Cast<UPrimitiveComponent>(OriginalPawn->GetRootComponent()))
+    {
+        RootComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        RootComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+        UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Disabled collision for manual camera - free flight enabled"));
+    }
+
     // Switch to the original pawn only if not already possessed
     if (PC->GetPawn() != OriginalPawn)
     {
         SwitchPlayerPawn(OriginalPawn);
         UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Switched possession to original DefaultPawn for manual camera at current view location"));
     }
+
+    // Ensure PlayerController's control rotation matches the camera view
+    PC->SetControlRotation(CurrentCameraTransform.GetRotation().Rotator());
 
     UE_LOG(LogRealGazeboUI, Display, TEXT("ViewerDirector: Switched to Manual Camera mode using original DefaultPawn at %s"),
            *CurrentCameraTransform.GetLocation().ToString());

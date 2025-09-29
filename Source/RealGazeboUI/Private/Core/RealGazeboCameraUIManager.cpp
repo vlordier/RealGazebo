@@ -2,11 +2,11 @@
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-//
-// Licensed under the MIT License.
+// Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
 
 #include "Core/RealGazeboCameraUIManager.h"
+#include "Core/RealGazeboUISubsystem.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -16,202 +16,201 @@
 #include "Widgets/RealGazeboMainWidget.h"
 #include "RealGazeboUI.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogRealGazeboCameraUIManager, Log, All);
+
 ARealGazeboCameraUIManager::ARealGazeboCameraUIManager()
 {
-    PrimaryActorTick.bCanEverTick = false;
-    PrimaryActorTick.bStartWithTickEnabled = false;
+    PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.TickInterval = 1.0f; // Update status every second
 
     // Set default values
     VehicleTypeImageDataTable = nullptr;
     MainWidgetClass = nullptr;
-    MainWidget = nullptr;
-    ViewerDirector = nullptr;
-
     bAutoCreateUI = true;
     bAutoAddToViewport = true;
     WidgetZOrder = 0;
-    bWidgetInViewport = false;
+    bAutoCreateViewerDirector = true;
     bAlwaysShowMouseCursor = true;
+
+    // Initialize status
+    UIStatus = TEXT("Not Started");
+    WidgetInViewportStatus = false;
 }
 
 void ARealGazeboCameraUIManager::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Ensure mouse cursor is visible from the start
-    EnsureMouseCursorVisible();
+    // Get reference to the UI subsystem
+    UISubsystem = URealGazeboUISubsystem::GetUISubsystem(this);
+
+    if (!UISubsystem.IsValid())
+    {
+        UE_LOG(LogRealGazeboCameraUIManager, Error, TEXT("Failed to get RealGazeboUISubsystem! Make sure the plugin is properly loaded."));
+        return;
+    }
+
+    // Validate configuration
+    if (!ValidateConfiguration())
+    {
+        UE_LOG(LogRealGazeboCameraUIManager, Warning, TEXT("Configuration validation failed. UI will not start automatically."));
+        return;
+    }
+
+    // Configure the subsystem with our settings
+    ConfigureSubsystem();
 
     // Auto-initialize UI if enabled
     if (bAutoCreateUI)
     {
         InitializeCameraUI();
     }
+
+    // Start status update timer
+    GetWorld()->GetTimerManager().SetTimer(StatusUpdateTimer, this, &ARealGazeboCameraUIManager::UpdateStatusDisplay, 1.0f, true);
 }
 
 void ARealGazeboCameraUIManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // Clean up UI
-    InternalCleanup();
+    // Clean up timer
+    if (GetWorld())
+    {
+        GetWorld()->GetTimerManager().ClearTimer(StatusUpdateTimer);
+    }
+
+    // Stop the UI if we started it
+    if (bDidStartSubsystem && UISubsystem.IsValid())
+    {
+        CleanupCameraUI();
+    }
 
     Super::EndPlay(EndPlayReason);
 }
 
 UUserWidget* ARealGazeboCameraUIManager::CreateMainWidget()
 {
-    // Validate prerequisites
-    if (!MainWidgetClass)
+    if (!UISubsystem.IsValid())
     {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: Cannot create widget - MainWidgetClass is not set"));
-        OnUISetupFailed(TEXT("MainWidgetClass is not configured"));
+        UE_LOG(LogRealGazeboCameraUIManager, Error, TEXT("Cannot create widget - UI subsystem not available"));
         return nullptr;
     }
 
-    APlayerController* PlayerController = GetPlayerController();
-    if (!PlayerController)
+    if (!ValidateConfiguration())
     {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: Cannot create widget - No PlayerController found"));
-        OnUISetupFailed(TEXT("No PlayerController available"));
+        UE_LOG(LogRealGazeboCameraUIManager, Error, TEXT("Cannot create widget - invalid configuration"));
         return nullptr;
     }
 
-    // Clean up existing widget if any
-    if (MainWidget)
+    // Use subsystem to create the widget
+    UUserWidget* CreatedWidget = UISubsystem->CreateMainWidget(MainWidgetClass, VehicleTypeImageDataTable);
+    if (CreatedWidget)
     {
-        InternalCleanup();
+        UE_LOG(LogRealGazeboCameraUIManager, Log, TEXT("Main widget created through subsystem"));
+    }
+    else
+    {
+        UE_LOG(LogRealGazeboCameraUIManager, Error, TEXT("Failed to create widget through subsystem"));
     }
 
-    // Create the main widget
-    MainWidget = CreateWidget<UUserWidget>(PlayerController, MainWidgetClass);
-    if (!MainWidget)
-    {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: Failed to create MainWidget instance"));
-        OnUISetupFailed(TEXT("Failed to create widget instance"));
-        return nullptr;
-    }
-
-    // Configure the widget with our settings
-    ConfigureMainWidget(MainWidget);
-
-    UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Main widget created successfully"));
-    return MainWidget;
+    return CreatedWidget;
 }
 
 void ARealGazeboCameraUIManager::AddMainWidgetToViewport()
 {
+    if (!UISubsystem.IsValid())
+    {
+        UE_LOG(LogRealGazeboCameraUIManager, Error, TEXT("Cannot add widget to viewport - UI subsystem not available"));
+        return;
+    }
+
+    UUserWidget* MainWidget = UISubsystem->GetActiveMainWidget();
     if (!MainWidget)
     {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: Cannot add to viewport - MainWidget is null"));
-        OnUISetupFailed(TEXT("MainWidget is null - call CreateMainWidget first"));
+        UE_LOG(LogRealGazeboCameraUIManager, Warning, TEXT("Cannot add to viewport - no active main widget"));
         return;
     }
 
-    if (bWidgetInViewport)
+    if (UISubsystem->IsWidgetInViewport(MainWidget))
     {
-        UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Widget already in viewport"));
+        UE_LOG(LogRealGazeboCameraUIManager, Log, TEXT("Widget already in viewport"));
         return;
     }
 
-    // Add to viewport with specified Z-order
-    MainWidget->AddToViewport(WidgetZOrder);
-    bWidgetInViewport = true;
-
-    UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Widget added to viewport with Z-order %d"), WidgetZOrder);
+    // Use subsystem to add to viewport
+    UISubsystem->AddWidgetToViewport(MainWidget, WidgetZOrder);
+    UE_LOG(LogRealGazeboCameraUIManager, Log, TEXT("Widget added to viewport through subsystem with Z-order %d"), WidgetZOrder);
 }
 
 void ARealGazeboCameraUIManager::InitializeCameraUI()
 {
-    // Validate setup first
-    if (!ValidateSetup())
+    if (!UISubsystem.IsValid())
     {
-        OnUISetupFailed(TEXT("Setup validation failed"));
+        UE_LOG(LogRealGazeboCameraUIManager, Error, TEXT("Cannot initialize UI - subsystem not available"));
         return;
     }
 
-    // Create ViewerDirector first if enabled
-    if (bAutoCreateViewerDirector)
+    if (!ValidateConfiguration())
     {
-        CreateViewerDirector();
-    }
-
-    // Create the main widget (now ViewerDirector is available for integration)
-    UUserWidget* CreatedWidget = CreateMainWidget();
-    if (!CreatedWidget)
-    {
-        // Error already logged and event called in CreateMainWidget
+        UE_LOG(LogRealGazeboCameraUIManager, Error, TEXT("Cannot initialize UI - invalid configuration"));
         return;
     }
 
-    // Add to viewport if enabled
-    if (bAutoAddToViewport)
+    // Configure subsystem with our settings
+    ConfigureSubsystem();
+
+    // Use subsystem to initialize complete camera UI
+    UISubsystem->InitializeCameraUI(
+        MainWidgetClass,
+        VehicleTypeImageDataTable,
+        InitialCameraLocation,
+        InitialCameraRotation,
+        bAutoCreateViewerDirector,
+        bAutoAddToViewport ? WidgetZOrder : -1 // -1 means don't add to viewport
+    );
+
+    bDidStartSubsystem = true;
+
+    // Add to viewport separately if auto-add is disabled (for manual control)
+    if (!bAutoAddToViewport)
     {
-        AddMainWidgetToViewport();
+        // Widget created but not added to viewport - user can control this manually
+        UE_LOG(LogRealGazeboCameraUIManager, Log, TEXT("UI created but not added to viewport (auto-add disabled)"));
     }
 
-    // Ensure mouse cursor is visible after UI creation
-    EnsureMouseCursorVisible();
+    // Ensure mouse cursor is visible
+    if (bAlwaysShowMouseCursor)
+    {
+        SetMouseCursorAlwaysVisible(true);
+    }
+
+    UE_LOG(LogRealGazeboCameraUIManager, Log, TEXT("Camera UI initialized through subsystem"));
 
     // Fire success event
     OnUICreated();
-    UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Camera UI initialized successfully"));
 }
 
 void ARealGazeboCameraUIManager::CleanupCameraUI()
 {
-    InternalCleanup();
+    if (UISubsystem.IsValid())
+    {
+        UISubsystem->CleanupCameraUI();
+        bDidStartSubsystem = false;
+        UE_LOG(LogRealGazeboCameraUIManager, Log, TEXT("Camera UI cleaned up through subsystem"));
+    }
+
     OnUICleanedUp();
-    UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Camera UI cleaned up"));
 }
 
 bool ARealGazeboCameraUIManager::ValidateSetup()
 {
-    // Check MainWidgetClass
-    if (!MainWidgetClass)
-    {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: MainWidgetClass is not set"));
-        return false;
-    }
-
-    // Check PlayerController availability
-    if (!GetPlayerController())
-    {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: No PlayerController available"));
-        return false;
-    }
-
-    // Validate VehicleTypeImageDataTable if provided
-    if (VehicleTypeImageDataTable && !ValidateVehicleTypeImageDataTable())
-    {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: VehicleTypeImageDataTable validation failed"));
-        return false;
-    }
-
-    return true;
+    return ValidateConfiguration();
 }
 
 bool ARealGazeboCameraUIManager::IsUIActive() const
 {
-    return MainWidget != nullptr && bWidgetInViewport;
+    return UISubsystem.IsValid() && UISubsystem->IsUIActive();
 }
 
-void ARealGazeboCameraUIManager::ConfigureMainWidget(UUserWidget* Widget)
-{
-    if (!Widget)
-    {
-        return;
-    }
-
-    // Setup VehicleTypeImageDataTable integration
-    SetupVehicleTypeImages(Widget);
-
-    // Setup ViewerDirector integration
-    SetupViewerDirectorIntegration(Widget);
-
-    // Ensure mouse cursor is visible after widget configuration
-    EnsureMouseCursorVisible();
-
-    // Additional widget configuration can be added here
-    // For example: setting update intervals, themes, etc.
-}
 
 APlayerController* ARealGazeboCameraUIManager::GetPlayerController() const
 {
@@ -254,161 +253,145 @@ bool ARealGazeboCameraUIManager::ValidateVehicleTypeImageDataTable() const
     return true;
 }
 
-void ARealGazeboCameraUIManager::SetupVehicleTypeImages(UUserWidget* Widget)
-{
-    if (!Widget)
-    {
-        return;
-    }
 
-    // If we have a VehicleTypeImageDataTable, configure the widget to use it
-    if (VehicleTypeImageDataTable)
-    {
-        // Try to cast to RealGazeboMainWidget and configure it
-        if (URealGazeboMainWidget* MainWidgetInstance = Cast<URealGazeboMainWidget>(Widget))
-        {
-            MainWidgetInstance->SetVehicleTypeImageDataTable(VehicleTypeImageDataTable);
-            UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Configured MainWidget with VehicleTypeImageDataTable"));
-        }
-        else
-        {
-            // For custom widgets that might inherit from RealGazeboMainWidget or have similar functionality
-            // This allows for flexibility with custom widget implementations
-            UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Custom widget detected - DataTable configuration may need custom implementation"));
-        }
-    }
-    else
-    {
-        UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: No VehicleTypeImageDataTable provided - widgets will use default images"));
-    }
-}
 
-void ARealGazeboCameraUIManager::SetupViewerDirectorIntegration(UUserWidget* Widget)
-{
-    if (!Widget)
-    {
-        return;
-    }
 
-    // Try to cast to RealGazeboMainWidget and set ViewerDirector reference
-    if (URealGazeboMainWidget* MainWidgetInstance = Cast<URealGazeboMainWidget>(Widget))
-    {
-        if (ViewerDirector)
-        {
-            MainWidgetInstance->SetViewerDirector(ViewerDirector);
-            UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Configured MainWidget with ViewerDirector for camera integration"));
-        }
-        else
-        {
-            UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: ViewerDirector not available - camera integration disabled"));
-        }
-    }
-    else
-    {
-        // For custom widgets that might not inherit from RealGazeboMainWidget
-        UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Custom widget detected - ViewerDirector integration may need custom implementation"));
-    }
-}
-
-void ARealGazeboCameraUIManager::CreateViewerDirector()
-{
-    if (ViewerDirector)
-    {
-        UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: ViewerDirector already exists"));
-        return;
-    }
-
-    UWorld* World = GetWorld();
-    if (!World)
-    {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: Cannot create ViewerDirector - No World available"));
-        return;
-    }
-
-    // Spawn ViewerDirector
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.Owner = this;
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    SpawnParams.Name = FName("RealGazeboViewerDirector");
-
-    ViewerDirector = World->SpawnActor<ARealGazeboViewerDirector>(ARealGazeboViewerDirector::StaticClass(),
-                                                                  GetActorLocation(),
-                                                                  GetActorRotation(),
-                                                                  SpawnParams);
-    if (ViewerDirector)
-    {
-        // Configure ViewerDirector with our camera settings
-        ViewerDirector->SetInitialCameraSettings(InitialCameraLocation, InitialCameraRotation);
-
-        UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: ViewerDirector created and configured with camera settings"));
-
-        // Ensure mouse cursor stays visible even with ViewerDirector camera controls
-        EnsureMouseCursorVisible();
-    }
-    else
-    {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: Failed to create ViewerDirector"));
-    }
-}
-
-void ARealGazeboCameraUIManager::InternalCleanup()
-{
-    // Remove from viewport if present
-    if (MainWidget && bWidgetInViewport)
-    {
-        MainWidget->RemoveFromParent();
-        bWidgetInViewport = false;
-    }
-
-    // Clean up ViewerDirector
-    if (ViewerDirector)
-    {
-        ViewerDirector->Destroy();
-        ViewerDirector = nullptr;
-    }
-
-    // Clear widget reference
-    MainWidget = nullptr;
-}
 
 //----------------------------------------------------------
-// Mouse Cursor Control Functions
+// Missing Method Implementations
 //----------------------------------------------------------
 
-void ARealGazeboCameraUIManager::EnsureMouseCursorVisible()
+void ARealGazeboCameraUIManager::ConfigureSubsystem()
 {
-    if (!bAlwaysShowMouseCursor)
+    if (!UISubsystem.IsValid())
     {
-        UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Mouse cursor control disabled - bAlwaysShowMouseCursor is false"));
         return;
     }
 
-    APlayerController* PlayerController = GetPlayerController();
-    if (!PlayerController)
+    // Configure mouse cursor settings
+    UISubsystem->SetMouseCursorAlwaysVisible(bAlwaysShowMouseCursor);
+
+    UE_LOG(LogRealGazeboCameraUIManager, Log, TEXT("Subsystem configured - WidgetClass: %s, DataTable: %s"),
+           MainWidgetClass ? *MainWidgetClass->GetName() : TEXT("None"),
+           VehicleTypeImageDataTable ? *VehicleTypeImageDataTable->GetName() : TEXT("None"));
+}
+
+UUserWidget* ARealGazeboCameraUIManager::GetMainWidget() const
+{
+    if (UISubsystem.IsValid())
     {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("CameraUIManager: Cannot control mouse cursor - No PlayerController available"));
-        return;
+        return UISubsystem->GetActiveMainWidget();
+    }
+    return nullptr;
+}
+
+ARealGazeboViewerDirector* ARealGazeboCameraUIManager::GetViewerDirector() const
+{
+    if (UISubsystem.IsValid())
+    {
+        return UISubsystem->GetViewerDirector();
+    }
+    return nullptr;
+}
+
+bool ARealGazeboCameraUIManager::ValidateConfiguration() const
+{
+    // Check MainWidgetClass
+    if (!MainWidgetClass)
+    {
+        UE_LOG(LogRealGazeboCameraUIManager, Warning, TEXT("MainWidgetClass is not set"));
+        return false;
     }
 
-    // Set mouse cursor to always visible
-    PlayerController->SetShowMouseCursor(true);
-    PlayerController->bEnableClickEvents = true;
-    PlayerController->bEnableMouseOverEvents = true;
+    // Check PlayerController availability
+    if (!GetPlayerController())
+    {
+        UE_LOG(LogRealGazeboCameraUIManager, Warning, TEXT("No PlayerController available"));
+        return false;
+    }
 
-    UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Mouse cursor set to always visible"));
+    // Validate VehicleTypeImageDataTable if provided
+    if (!ValidateVehicleTypeImageDataTable())
+    {
+        return false;
+    }
+
+    // Validate camera configuration
+    if (!ValidateCameraConfiguration())
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool ARealGazeboCameraUIManager::ValidateWidgetConfiguration() const
+{
+    if (!MainWidgetClass)
+    {
+        UE_LOG(LogRealGazeboCameraUIManager, Warning, TEXT("MainWidgetClass is not configured"));
+        return false;
+    }
+
+    return true;
+}
+
+bool ARealGazeboCameraUIManager::ValidateCameraConfiguration() const
+{
+    // Validate camera location and rotation values are reasonable
+    if (InitialCameraLocation.IsZero() && InitialCameraRotation.IsZero())
+    {
+        UE_LOG(LogRealGazeboCameraUIManager, Warning, TEXT("Camera location and rotation are both zero - may not be intended"));
+    }
+
+    return true;
+}
+
+void ARealGazeboCameraUIManager::UpdateStatusDisplay()
+{
+    if (IsUIActive())
+    {
+        UUserWidget* MainWidget = GetMainWidget();
+        ARealGazeboViewerDirector* Director = GetViewerDirector();
+        WidgetInViewportStatus = UISubsystem.IsValid() && UISubsystem->IsWidgetInViewport(MainWidget);
+        UIStatus = FString::Printf(TEXT("Active - Widget: %s | Director: %s"),
+                                  MainWidget ? TEXT("Created") : TEXT("None"),
+                                  Director ? TEXT("Created") : TEXT("None"));
+    }
+    else
+    {
+        UIStatus = TEXT("Inactive");
+        WidgetInViewportStatus = false;
+    }
 }
 
 void ARealGazeboCameraUIManager::SetMouseCursorAlwaysVisible(bool bVisible)
 {
     bAlwaysShowMouseCursor = bVisible;
 
-    if (bVisible)
+    if (UISubsystem.IsValid())
     {
-        EnsureMouseCursorVisible();
-        UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Mouse cursor always visible enabled"));
+        UISubsystem->SetMouseCursorAlwaysVisible(bVisible);
     }
-    else
+
+    UE_LOG(LogRealGazeboCameraUIManager, Log, TEXT("Mouse cursor always visible set to: %s"), bVisible ? TEXT("true") : TEXT("false"));
+}
+
+#if WITH_EDITOR
+void ARealGazeboCameraUIManager::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+    Super::PostEditChangeProperty(PropertyChangedEvent);
+
+    // Re-configure subsystem when properties change in editor
+    if (UISubsystem.IsValid() && PropertyChangedEvent.Property)
     {
-        UE_LOG(LogRealGazeboUI, Display, TEXT("CameraUIManager: Mouse cursor always visible disabled"));
+        ConfigureSubsystem();
     }
+}
+#endif
+
+void ARealGazeboCameraUIManager::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+    // Tick is used for status updates via timer
 }

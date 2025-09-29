@@ -1,9 +1,9 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.0",
+	"VersionName": "1.17.0",
 	"FriendlyName": "RealGazebo",
-	"Description": "Unmanned vehicle simulation bridge for Gazebo integration with efficient data management",
+	"Description": "Multi-Heterogeneous Unmanned Vehicle simulation bridge connecting PX4-Gazebo with Unreal Engine for real-time data management",
 	"Category": "Simulation",
 	"CreatedBy": "SUV Lab, Intelligent Systems and Robotics Department, Chungbuk National University",
 	"CreatedByURL": "https://sites.google.com/view/suvlab/home",
@@ -15,6 +15,12 @@
 	"IsExperimentalVersion": false,
 	"Installed": false,
 	"Modules": [
+		{
+			"Name": "RealGazebo",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [ "Win64", "Linux" ]
+		},
 		{
 			"Name": "RealGazeboBridge",
 			"Type": "Runtime",
@@ -37,6 +43,10 @@
 	"Plugins": [
 		{
 			"Name": "PixelCapture",
+			"Enabled": true
+		},
+		{
+			"Name": "HardwareEncoders",
 			"Enabled": true
 		}
 	]

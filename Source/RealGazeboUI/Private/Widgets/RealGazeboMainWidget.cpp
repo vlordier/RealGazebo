@@ -2,8 +2,7 @@
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-//
-// Licensed under the MIT License.
+// Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
 
 #include "Widgets/RealGazeboMainWidget.h"
@@ -184,7 +183,12 @@ void URealGazeboMainWidget::UpdateVehicleData()
     
     if (bVehicleListChanged)
     {
-        // Vehicle list updated
+        // Vehicle list updated - notify ViewerDirector to refresh its vehicle list
+        if (ViewerDirector.IsValid())
+        {
+            ViewerDirector->RefreshVehicleList();
+            UE_LOG(LogRealGazeboUI, Log, TEXT("MainWidget: Notified ViewerDirector to refresh vehicle list due to changes"));
+        }
     }
 }
 

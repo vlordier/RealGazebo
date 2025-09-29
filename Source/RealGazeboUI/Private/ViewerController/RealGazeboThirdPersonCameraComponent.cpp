@@ -2,8 +2,7 @@
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-//
-// Licensed under the MIT License.
+// Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
 
 #include "ViewerController/RealGazeboThirdPersonCameraComponent.h"
@@ -140,8 +139,8 @@ void URealGazeboThirdPersonCameraComponent::ConfigureSpringArmSettings()
     bEnableCameraRotationLag = true;
     CameraLagSpeed = 10.0f;
     CameraRotationLagSpeed = 10.0f;
-    bDoCollisionTest = true;
-    ProbeSize = 12.0f;
+    bDoCollisionTest = false;  // Disable collision so camera can move freely through walls
+    ProbeSize = 0.0f;         // No collision probe sphere
 
     // Spring arm inheritance settings for vehicle following
     bInheritPitch = true;

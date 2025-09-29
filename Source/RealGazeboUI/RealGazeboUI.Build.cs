@@ -1,70 +1,77 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+// Licensed under the BSD-3-Clause License.
+// See LICENSE file in the project root for full license information.
+
 using UnrealBuildTool;
 using System.IO;
 
 public class RealGazeboUI : ModuleRules
 {
-	public RealGazeboUI(ReadOnlyTargetRules Target) : base(Target)
-	{
-		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+    public RealGazeboUI(ReadOnlyTargetRules Target) : base(Target)
+    {
+        PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		// Public include paths
-        	PublicIncludePaths.AddRange(
-            new string[] {
-			Path.Combine(ModuleDirectory, "Public", "Core"),
-			Path.Combine(ModuleDirectory, "Public", "Data"),
-			Path.Combine(ModuleDirectory, "Public", "ViewerController"),
-			Path.Combine(ModuleDirectory, "Public", "Widgets")
-			}
-		);
+        PublicIncludePaths.AddRange(new string[]
+        {
+            Path.Combine(ModuleDirectory, "Public", "Core"),
+            Path.Combine(ModuleDirectory, "Public", "Data"),
+            Path.Combine(ModuleDirectory, "Public", "ViewerController"),
+            Path.Combine(ModuleDirectory, "Public", "Widgets")
+        });
 
-		// Core runtime dependencies
-		PublicDependencyModuleNames.AddRange(new string[] {
-			"Core",
-			"CoreUObject",
-			"Engine",
-			"InputCore",
-			"UMG",
-			"Slate",
-			"SlateCore",
-			"RealGazeboBridge"
-		});
+        PrivateIncludePaths.AddRange(new string[]
+        {
+            Path.Combine(ModuleDirectory, "Private", "Core"),
+            Path.Combine(ModuleDirectory, "Private", "Data"),
+            Path.Combine(ModuleDirectory, "Private", "ViewerController"),
+            Path.Combine(ModuleDirectory, "Private", "Widgets")
+        });
 
-		// Private implementation dependencies
-		PrivateDependencyModuleNames.AddRange(new string[] {
-			"ApplicationCore"
-		});
-		
-		// Editor-specific dependencies
-		if (Target.bBuildEditor)
-		{
-			PublicDependencyModuleNames.AddRange(new string[] {
-				"UnrealEd",
-				"ToolMenus"
-			});
-			
-			PrivateDependencyModuleNames.AddRange(new string[] {
-				"Projects"
-			});
-		}
-		
-		// No platform-specific dependencies needed for UI widgets
-		
-		DynamicallyLoadedModuleNames.AddRange(new string[] {
-			// Reserved for future dynamic module loading
-		});
-		
-		// Optimization settings
-		OptimizeCode = CodeOptimization.InShippingBuildsOnly;
-		
-		// Define preprocessor macros
-		PublicDefinitions.AddRange(new string[] {
-			"REALGAZEBO_UI_MODULE=1"
-		});
-		
-		if (Target.Configuration == UnrealTargetConfiguration.Debug ||
-			Target.Configuration == UnrealTargetConfiguration.DebugGame)
-		{
-			PublicDefinitions.Add("REALGAZEBO_UI_DEBUG=1");
-		}
-	}
+        PublicDependencyModuleNames.AddRange(new string[]
+        {
+            "Core",
+            "CoreUObject",
+            "Engine",
+            "InputCore",
+            "UMG",
+            "Slate",
+            "SlateCore",
+            "RealGazeboBridge"
+        });
+
+        PrivateDependencyModuleNames.AddRange(new string[]
+        {
+            "ApplicationCore"
+        });
+
+        if (Target.bBuildEditor)
+        {
+            PublicDependencyModuleNames.AddRange(new string[]
+            {
+                "UnrealEd",
+                "ToolMenus"
+            });
+
+            PrivateDependencyModuleNames.AddRange(new string[]
+            {
+                "Projects"
+            });
+        }
+
+        PublicDefinitions.AddRange(new string[]
+        {
+            "REALGAZEBO_CameraUI_MODULE=1"
+        });
+
+        if (Target.Configuration == UnrealTargetConfiguration.Debug ||
+            Target.Configuration == UnrealTargetConfiguration.DebugGame)
+        {
+            PublicDefinitions.Add("REALGAZEBO_CameraUI_DEBUG=1");
+        }
+
+        OptimizeCode = CodeOptimization.InShippingBuildsOnly;
+    }
 }

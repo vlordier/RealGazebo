@@ -1,3 +1,10 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Sub-author: MinKyu Kim
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+// Licensed under the BSD-3-Clause License.
+// See LICENSE file in the project root for full license information.
+
 using UnrealBuildTool;
 using System.IO;
 
@@ -7,26 +14,16 @@ public class RealGazeboStreaming : ModuleRules
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        // Public include paths for streaming interfaces
-        PublicIncludePaths.AddRange(
-            new string[] {
-            Path.Combine(ModuleDirectory, "Public", "Capture"),
-            Path.Combine(ModuleDirectory, "Public", "Streaming"),
-            Path.Combine(ModuleDirectory, "Private", "Processors"),
-            Path.Combine(ModuleDirectory, "Public", "Interfaces")
-            }
-        );
-        
-        // Private include paths for implementation
-        PrivateIncludePaths.AddRange(
-            new string[] {
-            Path.Combine(ModuleDirectory, "Private", "Capture"),
-            Path.Combine(ModuleDirectory, "Private", "Streaming"),
-            Path.Combine(ModuleDirectory, "Private", "Processors")
-            }
-        );
+        PublicIncludePaths.AddRange(new string[]
+        {
+            Path.Combine(ModuleDirectory, "Public")
+        });
 
-        // Core runtime dependencies for streaming
+        PrivateIncludePaths.AddRange(new string[]
+        {
+            Path.Combine(ModuleDirectory, "Private")
+        });
+
         PublicDependencyModuleNames.AddRange(new string[]
         {
             "Core",
@@ -39,10 +36,10 @@ public class RealGazeboStreaming : ModuleRules
             "HTTP",
             "Json",
             "JsonUtilities",
-            "RealGazeboBridge"  // Dependency on bridge for vehicle data
+            "RealGazeboBridge",
+            "Live555"
         });
 
-        // Private implementation dependencies
         PrivateDependencyModuleNames.AddRange(new string[]
         {
             "Slate",
@@ -51,11 +48,10 @@ public class RealGazeboStreaming : ModuleRules
             "ImageWrapper",
             "ApplicationCore",
             "Renderer",
-            "PixelCapture",     // For GPU-optimized capture
-            "MediaIOCore",      // For advanced media I/O
+            "PixelCapture",
+            "AVEncoder"
         });
 
-        // Editor-specific dependencies
         if (Target.bBuildEditor)
         {
             PublicDependencyModuleNames.AddRange(new string[]
@@ -64,7 +60,7 @@ public class RealGazeboStreaming : ModuleRules
                 "ToolMenus",
                 "UnrealEd"
             });
-            
+
             PrivateDependencyModuleNames.AddRange(new string[]
             {
                 "WorkspaceMenuStructure",
@@ -74,13 +70,9 @@ public class RealGazeboStreaming : ModuleRules
             });
         }
 
-        // Platform-specific configurations
         if (Target.Platform == UnrealTargetPlatform.Linux)
         {
-            PrivateDependencyModuleNames.AddRange(new string[]
-            {
-                "UnixCommonStartup"
-            });
+            PrivateDependencyModuleNames.Add("UnixCommonStartup");
         }
         else if (Target.Platform == UnrealTargetPlatform.Win64)
         {
@@ -91,21 +83,18 @@ public class RealGazeboStreaming : ModuleRules
             });
         }
 
-        // Preprocessor definitions
         PublicDefinitions.AddRange(new string[]
         {
             "WITH_REALGAZEBO_STREAMING=1",
             "REALGAZEBO_STREAMING_MODULE=1"
         });
 
-        // Debug definitions
         if (Target.Configuration == UnrealTargetConfiguration.Debug ||
             Target.Configuration == UnrealTargetConfiguration.DebugGame)
         {
             PublicDefinitions.Add("REALGAZEBO_STREAMING_DEBUG=1");
         }
 
-        // Optimization settings
         OptimizeCode = CodeOptimization.InShippingBuildsOnly;
     }
 }

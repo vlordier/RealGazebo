@@ -2,8 +2,7 @@
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-//
-// Licensed under the MIT License.
+// Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -112,7 +111,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Bridge|Access")
     UDataStreamProcessor* GetDataStreamProcessor() const { return StreamProcessor; }
 
-    /** Set update frequency (called by RealGazeboManager) */
+    /** Set update frequency (called by RealGazeboBridgeManager) */
     void SetUpdateFrequency(float Frequency) { ConfiguredUpdateFrequency = FMath::Clamp(Frequency, 10.0f, 120.0f); }
 
     /** Get current update frequency */
@@ -228,6 +227,6 @@ private:
     /** Performance monitoring */
     mutable double LastPerformanceCheck = 0.0;
 
-    /** Update frequency configured by RealGazeboManager */
+    /** Update frequency configured by RealGazeboBridgeManager */
     float ConfiguredUpdateFrequency = 60.0f;
 };

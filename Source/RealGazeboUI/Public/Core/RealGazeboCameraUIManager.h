@@ -2,8 +2,7 @@
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-//
-// Licensed under the MIT License.
+// Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -15,17 +14,22 @@
 #include "Data/VehicleTypeImageData.h"
 #include "RealGazeboCameraUIManager.generated.h"
 
+// Forward declarations
+class URealGazeboUISubsystem;
+
 /**
  * User-friendly RealGazebo Camera UI Manager Actor for plug-and-play usage
  *
- * This provides drag-and-drop camera UI setup with vehicle type image integration.
- * Similar to RealGazeboManager for consistent user experience.
+ * This provides drag-and-drop camera UI setup while leveraging
+ * the high-performance subsystem architecture underneath.
+ * Similar to RealGazeboBridgeManager for consistent user experience.
  *
  * Key Features:
  * - Drag-and-drop into level
  * - Visual configuration in Details panel
- * - Auto-create main UI widget
+ * - Auto-create main UI widget through subsystem
  * - VehicleTypeImageDataTable integration for vehicle icons
+ * - Automatic subsystem configuration
  * - Blueprint-friendly setup functions
  */
 UCLASS(BlueprintType, Blueprintable, meta = (DisplayName = "RealGazebo Camera UI Manager"))
@@ -100,62 +104,48 @@ public:
     FRotator InitialCameraRotation = FRotator(-20.0f, 0.0f, 0.0f);
 
     //----------------------------------------------------------
-    // Blueprint Functions - Easy Setup
+    // Runtime Control (Blueprint/C++ API)
     //----------------------------------------------------------
 
     /** Create the main widget with proper configuration */
-    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI",
-              meta = (DisplayName = "Create Main Widget", CallInEditor = "true"))
+    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI|Control", meta = (DisplayName = "Create Main Widget"))
     UUserWidget* CreateMainWidget();
 
     /** Add the main widget to viewport */
-    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI",
-              meta = (DisplayName = "Add Widget to Viewport", CallInEditor = "true"))
+    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI|Control", meta = (DisplayName = "Add Widget to Viewport"))
     void AddMainWidgetToViewport();
 
     /** Complete UI setup in one call - creates widget and adds to viewport */
-    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI",
-              meta = (DisplayName = "Initialize Camera UI", CallInEditor = "true"))
+    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI|Control", meta = (DisplayName = "Initialize Camera UI"))
     void InitializeCameraUI();
 
     /** Remove widget from viewport and cleanup */
-    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI")
+    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI|Control", meta = (DisplayName = "Cleanup Camera UI"))
     void CleanupCameraUI();
 
-    //----------------------------------------------------------
-    // Mouse Cursor Control Functions
-    //----------------------------------------------------------
-
-    /** Ensure mouse cursor is always visible */
-    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI|Mouse Control",
-              meta = (DisplayName = "Ensure Mouse Cursor Visible", CallInEditor = "true"))
-    void EnsureMouseCursorVisible();
-
     /** Force mouse cursor visibility state */
-    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI|Mouse Control",
-              meta = (DisplayName = "Set Mouse Cursor Always Visible"))
+    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI|Control", meta = (DisplayName = "Set Mouse Always Visible"))
     void SetMouseCursorAlwaysVisible(bool bVisible);
 
-    //----------------------------------------------------------
-    // Configuration & Validation
-    //----------------------------------------------------------
-
     /** Validate the current setup and return status */
-    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI|Validation",
-              meta = (DisplayName = "Validate Setup"))
+    UFUNCTION(BlueprintCallable, Category = "RealGazeboCamera UI|Control", meta = (DisplayName = "Validate Setup"))
     bool ValidateSetup();
 
+    //----------------------------------------------------------
+    // Status Information (for UI)
+    //----------------------------------------------------------
+
     /** Get the currently created main widget (if any) */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazeboCamera UI")
-    UUserWidget* GetMainWidget() const { return MainWidget; }
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazeboCamera UI|Status", meta = (DisplayName = "Get Main Widget"))
+    UUserWidget* GetMainWidget() const;
 
     /** Check if UI is currently active */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazeboCamera UI")
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazeboCamera UI|Status", meta = (DisplayName = "Is UI Active"))
     bool IsUIActive() const;
 
     /** Get the created viewer director (if any) */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazeboCamera UI")
-    class ARealGazeboViewerDirector* GetViewerDirector() const { return ViewerDirector; }
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazeboCamera UI|Status", meta = (DisplayName = "Get Viewer Director"))
+    class ARealGazeboViewerDirector* GetViewerDirector() const;
 
     //----------------------------------------------------------
     // Events (Blueprint Implementable)
@@ -180,29 +170,38 @@ protected:
 
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void Tick(float DeltaTime) override;
+
+#if WITH_EDITOR
+    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 
     //----------------------------------------------------------
-    // Internal Data
+    // Internal Logic
     //----------------------------------------------------------
 
-    /** Reference to the created main widget */
-    UPROPERTY()
-    TObjectPtr<UUserWidget> MainWidget;
+    /** Configure the subsystem with our settings */
+    void ConfigureSubsystem();
 
-    /** Reference to the created viewer director */
+    /** Reference to the subsystem we're controlling */
     UPROPERTY()
-    TObjectPtr<class ARealGazeboViewerDirector> ViewerDirector;
+    TWeakObjectPtr<URealGazeboUISubsystem> UISubsystem;
 
-    /** Track if widget is currently added to viewport */
-    bool bWidgetInViewport = false;
+    /** Track if we started the subsystem */
+    bool bDidStartSubsystem = false;
+
+    /** Status display for debugging */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RealGazeboCamera UI|Status", meta = (DisplayName = "UI Status"))
+    FString UIStatus = TEXT("Not Initialized");
+
+    /** Widget state for display */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RealGazeboCamera UI|Status", meta = (DisplayName = "Widget In Viewport"))
+    bool WidgetInViewportStatus = false;
 
 private:
     //----------------------------------------------------------
     // Internal Methods
     //----------------------------------------------------------
-
-    /** Configure the created widget with our settings */
-    void ConfigureMainWidget(UUserWidget* Widget);
 
     /** Get the player controller for widget operations */
     class APlayerController* GetPlayerController() const;
@@ -210,15 +209,22 @@ private:
     /** Validate DataTable structure and contents */
     bool ValidateVehicleTypeImageDataTable() const;
 
-    /** Setup widget with VehicleTypeImageDataTable reference */
-    void SetupVehicleTypeImages(UUserWidget* Widget);
+    //----------------------------------------------------------
+    // Validation and Helpers
+    //----------------------------------------------------------
 
-    /** Setup widget with ViewerDirector reference for camera integration */
-    void SetupViewerDirectorIntegration(UUserWidget* Widget);
+    /** Update status display */
+    void UpdateStatusDisplay();
 
-    /** Create viewer director for camera control */
-    void CreateViewerDirector();
+    /** Validate configuration */
+    bool ValidateConfiguration() const;
 
-    /** Internal cleanup without events */
-    void InternalCleanup();
+    /** Validate widget class configuration */
+    bool ValidateWidgetConfiguration() const;
+
+    /** Validate camera configuration values */
+    bool ValidateCameraConfiguration() const;
+
+    /** Timer for periodic status updates */
+    FTimerHandle StatusUpdateTimer;
 };
