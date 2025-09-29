@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.17.0",
+	"VersionName": "1.1",
 	"FriendlyName": "RealGazebo",
 	"Description": "Multi-Heterogeneous Unmanned Vehicle simulation bridge connecting PX4-Gazebo with Unreal Engine for real-time data management",
 	"Category": "Simulation",
