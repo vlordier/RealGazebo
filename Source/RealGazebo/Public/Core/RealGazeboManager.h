@@ -11,7 +11,7 @@
 #include "GameFramework/Actor.h"
 #include "Engine/DataTable.h"
 #include "GazeboBridgeTypes.h"
-#include "Data/VehicleTypeImageData.h"
+#include "Data/RealGazeboVehicleData.h"
 #include "RealGazeboManager.generated.h"
 
 // Forward declarations
@@ -49,21 +49,22 @@ public:
     // Essential Configuration - Core Data Tables
     //----------------------------------------------------------
 
-    /** Vehicle Configuration DataTable for bridge operations */
+    /** Unified Vehicle Configuration DataTable
+     *  Contains ALL vehicle configuration: Bridge settings (motor/servo counts, pawn class)
+     *  AND UI display data (vehicle images/icons).
+     *
+     *  Replaces the previous two separate tables (VehicleDataTable + VehicleTypeImageDataTable).
+     *
+     *  DataTable Row Type: FRealGazeboVehicleConfigRow
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo",
-              meta = (DisplayName = "Vehicle Data Table", DisplayPriority = "1",
-                     ToolTip = "DataTable containing vehicle configurations for bridge operations"))
-    TObjectPtr<UDataTable> VehicleDataTable;
-
-    /** Vehicle Type Images DataTable for UI icons and display */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo",
-              meta = (DisplayName = "Vehicle Type Images DataTable", DisplayPriority = "2",
-                     ToolTip = "DataTable containing vehicle type codes and their corresponding images for UI"))
-    TObjectPtr<UDataTable> VehicleTypeImageDataTable;
+              meta = (DisplayName = "Unified Vehicle Configuration", DisplayPriority = "1",
+                     ToolTip = "Unified DataTable containing complete vehicle configurations for both Bridge operations and UI display. Uses FRealGazeboVehicleConfigRow structure."))
+    TObjectPtr<UDataTable> UnifiedVehicleDataTable;
 
     /** Main Widget Class for UI management */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo",
-              meta = (DisplayName = "Main Widget Class", DisplayPriority = "3",
+              meta = (DisplayName = "Main Widget Class", DisplayPriority = "2",
                      ToolTip = "Widget class to create for the main UI. Must be set manually (e.g., WBP_RealGazeboMain)."))
     TSubclassOf<UUserWidget> MainWidgetClass;
 
@@ -410,6 +411,16 @@ protected:
     void ConfigureBridgePoolSettings();
 
     //----------------------------------------------------------
+    // DataTable Conversion Helpers
+    //----------------------------------------------------------
+
+    /** Create a Bridge-compatible DataTable from unified configuration */
+    UDataTable* CreateBridgeCompatibleDataTable();
+
+    /** Create a UI-compatible DataTable from unified configuration */
+    UDataTable* CreateUICompatibleDataTable();
+
+    //----------------------------------------------------------
     // Validation Methods
     //----------------------------------------------------------
 
@@ -428,4 +439,12 @@ protected:
 private:
     /** Timer for periodic status updates */
     FTimerHandle StatusUpdateTimer;
+
+    /** Runtime-created DataTable for Bridge subsystem (converted from unified) */
+    UPROPERTY()
+    TObjectPtr<UDataTable> RuntimeBridgeDataTable;
+
+    /** Runtime-created DataTable for UI subsystem (converted from unified) */
+    UPROPERTY()
+    TObjectPtr<UDataTable> RuntimeUIDataTable;
 };

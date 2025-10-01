@@ -17,6 +17,8 @@
 #include "TimerManager.h"
 #include "Components/Widget.h"
 #include "Blueprint/UserWidget.h"
+#include "Data/RealGazeboVehicleData.h"
+#include "Data/VehicleTypeImageData.h"
 
 ARealGazeboManager::ARealGazeboManager()
 {
@@ -35,6 +37,10 @@ ARealGazeboManager::ARealGazeboManager()
     BridgeSubsystem = nullptr;
     UISubsystem = nullptr;
     ViewerDirector = nullptr;
+
+    // Initialize runtime DataTables
+    RuntimeBridgeDataTable = nullptr;
+    RuntimeUIDataTable = nullptr;
 }
 
 //----------------------------------------------------------
@@ -45,9 +51,7 @@ void ARealGazeboManager::BeginPlay()
 {
     Super::BeginPlay();
 
-    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Manager [%s]: BeginPlay"), *GetName());
-
-    // Configuration ready for initialization
+    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Manager: Initializing [%s]"), *GetName());
 
     // Get subsystem references
     if (UGameInstance* GameInstance = GetGameInstance())
@@ -57,17 +61,17 @@ void ARealGazeboManager::BeginPlay()
 
         if (!BridgeSubsystem.IsValid())
         {
-            UE_LOG(LogRealGazebo, Warning, TEXT("RealGazebo Manager [%s]: Bridge subsystem not found - Bridge features will be disabled"), *GetName());
+            UE_LOG(LogRealGazebo, Warning, TEXT("Bridge subsystem not found - Bridge features disabled"));
         }
 
         if (!UISubsystem.IsValid())
         {
-            UE_LOG(LogRealGazebo, Warning, TEXT("RealGazebo Manager [%s]: UI subsystem not found - UI features will be disabled"), *GetName());
+            UE_LOG(LogRealGazebo, Warning, TEXT("UI subsystem not found - UI features disabled"));
         }
     }
     else
     {
-        UE_LOG(LogRealGazebo, Error, TEXT("RealGazebo Manager [%s]: GameInstance not available"), *GetName());
+        UE_LOG(LogRealGazebo, Error, TEXT("GameInstance not available"));
         return;
     }
 
@@ -93,7 +97,7 @@ void ARealGazeboManager::BeginPlay()
 
 void ARealGazeboManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Manager [%s]: EndPlay"), *GetName());
+    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Manager: Shutting down"));
 
     // Clear timer
     GetWorldTimerManager().ClearTimer(StatusUpdateTimer);
@@ -126,17 +130,11 @@ void ARealGazeboManager::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
 {
     Super::PostEditChangeProperty(PropertyChangedEvent);
 
-    if (PropertyChangedEvent.Property != nullptr)
+    // Reconfigure subsystems when properties change
+    if (PropertyChangedEvent.Property != nullptr && (BridgeSubsystem.IsValid() || UISubsystem.IsValid()))
     {
-        const FName PropertyName = PropertyChangedEvent.Property->GetFName();
-        UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Manager [%s]: Property changed: %s"), *GetName(), *PropertyName.ToString());
-
-        // Reconfigure subsystems when properties change
-        if (BridgeSubsystem.IsValid() || UISubsystem.IsValid())
-        {
-            ConfigureBridgeSubsystem();
-            ConfigureUISubsystem();
-        }
+        ConfigureBridgeSubsystem();
+        ConfigureUISubsystem();
     }
 }
 #endif
@@ -147,8 +145,6 @@ void ARealGazeboManager::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
 
 void ARealGazeboManager::StartBridge()
 {
-    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Manager [%s]: StartBridge"), *GetName());
-
     if (!BridgeSubsystem.IsValid())
     {
         UE_LOG(LogRealGazebo, Error, TEXT("Bridge subsystem not available"));
@@ -156,15 +152,21 @@ void ARealGazeboManager::StartBridge()
         return;
     }
 
-    // Configure Bridge settings before starting
+    // Configure Bridge settings
     BridgeSubsystem->ListenPort = ListenPort;
     BridgeSubsystem->bAutoSpawnVehicles = bAutoSpawnVehicles;
     BridgeSubsystem->SetUpdateFrequency(UpdateFrequency);
 
-    // CRITICAL: Set VehicleConfigTable so Bridge can spawn Blueprint vehicles instead of basic VehicleBasePawn
-    BridgeSubsystem->VehicleConfigTable = VehicleDataTable;
+    // Convert unified DataTable to Bridge-compatible format
+    UDataTable* BridgeCompatibleTable = CreateBridgeCompatibleDataTable();
+    if (!BridgeCompatibleTable)
+    {
+        UE_LOG(LogRealGazebo, Error, TEXT("Failed to create Bridge-compatible DataTable"));
+        BridgeStatus = TEXT("Error - DataTable Conversion Failed");
+        return;
+    }
 
-    // Configure Vehicle Pool Settings
+    BridgeSubsystem->VehicleConfigTable = BridgeCompatibleTable;
     ConfigureBridgePoolSettings();
 
     BridgeSubsystem->StartBridge();
@@ -173,8 +175,7 @@ void ARealGazeboManager::StartBridge()
     if (bDidStartBridge)
     {
         BridgeStatus = TEXT("Active");
-        FBridgePoseData DummyData; // Create dummy data for event
-        OnBridgeStarted.Broadcast(DummyData);
+        OnBridgeStarted.Broadcast(FBridgePoseData());
         UE_LOG(LogRealGazebo, Log, TEXT("Bridge started successfully"));
     }
     else
@@ -186,15 +187,13 @@ void ARealGazeboManager::StartBridge()
 
 void ARealGazeboManager::StopBridge()
 {
-    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Manager [%s]: StopBridge"), *GetName());
-
     if (BridgeSubsystem.IsValid())
     {
         BridgeSubsystem->StopBridge();
         bDidStartBridge = false;
         BridgeStatus = TEXT("Stopped");
-        FBridgePoseData DummyData; // Create dummy data for event
-        OnBridgeStopped.Broadcast(DummyData);
+        OnBridgeStopped.Broadcast(FBridgePoseData());
+        UE_LOG(LogRealGazebo, Log, TEXT("Bridge stopped"));
     }
 }
 
@@ -268,73 +267,56 @@ void ARealGazeboManager::AddMainWidgetToViewport()
 
 void ARealGazeboManager::InitializeCameraUI()
 {
-    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Manager [%s]: InitializeCameraUI"), *GetName());
-
     if (!UISubsystem.IsValid())
     {
-        UE_LOG(LogRealGazebo, Error, TEXT("Cannot initialize Camera UI - UI subsystem not available"));
+        UE_LOG(LogRealGazebo, Error, TEXT("Cannot initialize UI - UI subsystem not available"));
         return;
     }
 
-    // CRITICAL: Use UISubsystem InitializeCameraUI to create ViewerDirector + MainWidget together
+    // Convert unified DataTable to UI-compatible format
+    UDataTable* UICompatibleTable = CreateUICompatibleDataTable();
+    if (!UICompatibleTable)
+    {
+        UE_LOG(LogRealGazebo, Error, TEXT("Failed to create UI-compatible DataTable"));
+        UIStatus = TEXT("Error - DataTable Conversion Failed");
+        return;
+    }
+
     UISubsystem->InitializeCameraUI(
         MainWidgetClass,
-        VehicleTypeImageDataTable,
+        UICompatibleTable,
         InitialCameraLocation,
         InitialCameraRotation,
         bAutoCreateViewerDirector,
-        bAutoAddToViewport ? WidgetZOrder : -1 // -1 means don't add to viewport
+        bAutoAddToViewport ? WidgetZOrder : -1
     );
 
-    // Get the ViewerDirector reference from UISubsystem (it creates it automatically)
     ViewerDirector = UISubsystem->GetViewerDirector();
-    if (ViewerDirector.IsValid())
-    {
-        UE_LOG(LogRealGazebo, Log, TEXT("ViewerDirector created: %s"), *ViewerDirector->GetName());
-    }
-    else
-    {
-        UE_LOG(LogRealGazebo, Warning, TEXT("ViewerDirector not available from UI subsystem"));
-    }
-
-    // Check if widget was created successfully
-    UUserWidget* CreatedWidget = UISubsystem->GetActiveMainWidget();
-    if (CreatedWidget)
-    {
-        UE_LOG(LogRealGazebo, Log, TEXT("Main widget created successfully"));
-    }
-    else
-    {
-        UE_LOG(LogRealGazebo, Warning, TEXT("Failed to create main widget"));
-    }
-
-    // Set mouse cursor visibility through UISubsystem
     UISubsystem->SetMouseCursorAlwaysVisible(bAlwaysShowMouseCursor);
 
     bDidStartUI = true;
+    UUserWidget* CreatedWidget = UISubsystem->GetActiveMainWidget();
     UIStatus = CreatedWidget ? TEXT("UI Active") : TEXT("UI Partial (No Widget)");
 
-    // Note: OnUICreated() is a BlueprintImplementableEvent, so it's implemented in Blueprint
-    // OnUICreated();
+    UE_LOG(LogRealGazebo, Log, TEXT("Camera UI initialized: Widget=%s, ViewerDirector=%s"),
+           CreatedWidget ? TEXT("OK") : TEXT("FAILED"),
+           ViewerDirector.IsValid() ? TEXT("OK") : TEXT("FAILED"));
 }
 
 void ARealGazeboManager::CleanupCameraUI()
 {
-    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Manager [%s]: CleanupCameraUI"), *GetName());
-
     if (UISubsystem.IsValid())
     {
         UISubsystem->CleanupCameraUI();
     }
 
-    // Clear ViewerDirector reference (UISubsystem handles destruction)
     ViewerDirector = nullptr;
-
-    // Update status
     WidgetInViewportStatus = false;
     bDidStartUI = false;
     UIStatus = TEXT("Cleaned Up");
     OnUICleanedUp();
+
+    UE_LOG(LogRealGazebo, Log, TEXT("Camera UI cleaned up"));
 }
 
 void ARealGazeboManager::SetMouseCursorAlwaysVisible(bool bVisible)
@@ -525,29 +507,79 @@ void ARealGazeboManager::ConfigureBridgePoolSettings()
 }
 
 //----------------------------------------------------------
+// DataTable Conversion Helpers
+//----------------------------------------------------------
+
+UDataTable* ARealGazeboManager::CreateBridgeCompatibleDataTable()
+{
+    if (!UnifiedVehicleDataTable)
+    {
+        UE_LOG(LogRealGazebo, Warning, TEXT("Cannot create Bridge DataTable - UnifiedVehicleDataTable is null"));
+        return nullptr;
+    }
+
+    RuntimeBridgeDataTable = NewObject<UDataTable>(this, UDataTable::StaticClass(), TEXT("RuntimeBridgeDataTable"));
+    RuntimeBridgeDataTable->RowStruct = FBridgeVehicleConfigRow::StaticStruct();
+
+    TArray<FName> RowNames = UnifiedVehicleDataTable->GetRowNames();
+    for (const FName& RowName : RowNames)
+    {
+        if (const FRealGazeboVehicleConfigRow* UnifiedRow = UnifiedVehicleDataTable->FindRow<FRealGazeboVehicleConfigRow>(RowName, TEXT("")))
+        {
+            RuntimeBridgeDataTable->AddRow(RowName, UnifiedRow->ToBridgeConfigRow());
+        }
+    }
+
+    UE_LOG(LogRealGazebo, Verbose, TEXT("Created Bridge DataTable with %d rows"), RowNames.Num());
+    return RuntimeBridgeDataTable;
+}
+
+UDataTable* ARealGazeboManager::CreateUICompatibleDataTable()
+{
+    if (!UnifiedVehicleDataTable)
+    {
+        UE_LOG(LogRealGazebo, Warning, TEXT("Cannot create UI DataTable - UnifiedVehicleDataTable is null"));
+        return nullptr;
+    }
+
+    RuntimeUIDataTable = NewObject<UDataTable>(this, UDataTable::StaticClass(), TEXT("RuntimeUIDataTable"));
+    RuntimeUIDataTable->RowStruct = FVehicleTypeImageRow::StaticStruct();
+
+    TArray<FName> RowNames = UnifiedVehicleDataTable->GetRowNames();
+    for (const FName& RowName : RowNames)
+    {
+        if (const FRealGazeboVehicleConfigRow* UnifiedRow = UnifiedVehicleDataTable->FindRow<FRealGazeboVehicleConfigRow>(RowName, TEXT("")))
+        {
+            RuntimeUIDataTable->AddRow(RowName, UnifiedRow->ToVehicleTypeImageRow());
+        }
+    }
+
+    UE_LOG(LogRealGazebo, Verbose, TEXT("Created UI DataTable with %d rows"), RowNames.Num());
+    return RuntimeUIDataTable;
+}
+
+//----------------------------------------------------------
 // Validation Methods
 //----------------------------------------------------------
 
 bool ARealGazeboManager::ValidateVehicleDataTable() const
 {
-    if (!VehicleDataTable)
+    if (!UnifiedVehicleDataTable)
     {
-        UE_LOG(LogRealGazebo, Warning, TEXT("RealGazebo Manager [%s]: VehicleDataTable not set - vehicles will use fallback configuration"), *GetName());
-        return true; // Non-critical - system can work with fallback
+        UE_LOG(LogRealGazebo, Warning, TEXT("UnifiedVehicleDataTable not set - using fallback configuration"));
+        return true;
     }
 
-    // Check if DataTable uses the correct row structure
-    if (VehicleDataTable->GetRowStruct() != FBridgeVehicleConfigRow::StaticStruct())
+    if (UnifiedVehicleDataTable->GetRowStruct() != FRealGazeboVehicleConfigRow::StaticStruct())
     {
-        UE_LOG(LogRealGazebo, Error, TEXT("RealGazebo Manager [%s]: VehicleDataTable must use FBridgeVehicleConfigRow structure"), *GetName());
+        UE_LOG(LogRealGazebo, Error, TEXT("UnifiedVehicleDataTable must use FRealGazeboVehicleConfigRow structure"));
         return false;
     }
 
-    // Check if DataTable has at least one row
-    if (VehicleDataTable->GetRowNames().Num() == 0)
+    if (UnifiedVehicleDataTable->GetRowNames().Num() == 0)
     {
-        UE_LOG(LogRealGazebo, Warning, TEXT("RealGazebo Manager [%s]: VehicleDataTable is empty - no vehicle configurations found"), *GetName());
-        return true; // Non-critical - system can work with fallback
+        UE_LOG(LogRealGazebo, Warning, TEXT("UnifiedVehicleDataTable is empty"));
+        return true;
     }
 
     return true;
@@ -557,16 +589,30 @@ bool ARealGazeboManager::ValidateUIConfiguration() const
 {
     if (!MainWidgetClass)
     {
-        UE_LOG(LogRealGazebo, Error, TEXT("RealGazebo Manager [%s]: MainWidgetClass not set but Auto Create UI is enabled"), *GetName());
+        UE_LOG(LogRealGazebo, Error, TEXT("MainWidgetClass not set but Auto Create UI is enabled"));
         return false;
     }
 
-    if (!VehicleTypeImageDataTable)
+    if (!UnifiedVehicleDataTable)
     {
-        UE_LOG(LogRealGazebo, Warning, TEXT("RealGazebo Manager [%s]: VehicleTypeImageDataTable not set - UI will use default icons"), *GetName());
-        // Non-critical - UI can work with defaults
+        UE_LOG(LogRealGazebo, Warning, TEXT("UnifiedVehicleDataTable not set - UI will use default icons"));
+        return true;
     }
 
+    // Check if any rows have vehicle images configured
+    TArray<FName> RowNames = UnifiedVehicleDataTable->GetRowNames();
+    for (const FName& RowName : RowNames)
+    {
+        if (const FRealGazeboVehicleConfigRow* Row = UnifiedVehicleDataTable->FindRow<FRealGazeboVehicleConfigRow>(RowName, TEXT("")))
+        {
+            if (Row->HasVehicleImage())
+            {
+                return true;
+            }
+        }
+    }
+
+    UE_LOG(LogRealGazebo, Warning, TEXT("No vehicle images configured - UI will use default icons"));
     return true;
 }
 
@@ -574,10 +620,9 @@ bool ARealGazeboManager::ValidateBridgeSubsystem() const
 {
     if (!BridgeSubsystem.IsValid())
     {
-        UE_LOG(LogRealGazebo, Error, TEXT("RealGazebo Manager [%s]: Bridge subsystem not available"), *GetName());
+        UE_LOG(LogRealGazebo, Error, TEXT("Bridge subsystem not available"));
         return false;
     }
-
     return true;
 }
 

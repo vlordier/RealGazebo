@@ -17,6 +17,7 @@ public class RealGazebo : ModuleRules
         PublicIncludePaths.AddRange(new string[]
         {
             Path.Combine(ModuleDirectory, "Public", "Core"),
+            Path.Combine(ModuleDirectory, "Public", "Data"),
         });
 
         PrivateIncludePaths.AddRange(new string[]
