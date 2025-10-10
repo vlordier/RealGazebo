@@ -10,6 +10,8 @@
 #include "Engine/Engine.h"
 #include "Components/ListView.h"
 #include "Components/TextBlock.h"
+#include "Components/Button.h"
+#include "Components/Border.h"
 #include "TimerManager.h"
 #include "RealGazeboUI.h"
 #include "Widgets/RealGazeboVehicleEntry.h"
@@ -23,12 +25,14 @@ URealGazeboMainWidget::URealGazeboMainWidget(const FObjectInitializer& ObjectIni
     // Set default values
     UpdateFrequency = 30.0f;
     MaxDisplayVehicles = 256;
-    
+    FadeDuration = 1.0f;
+
     // Initialize tracking variables
     LastVehicleCount = 0;
     bLastConnectionStatus = false;
     CurrentSelectedVehicleID = FVehicleID(0, 0); // Invalid ID as default
-    
+    FadeElapsedTime = 0.0f;
+
     // Enable ticking for real-time updates
     bIsFocusable = false;
     SetVisibility(ESlateVisibility::SelfHitTestInvisible);
@@ -57,7 +61,32 @@ void URealGazeboMainWidget::NativeConstruct()
     {
         UE_LOG(LogRealGazeboUI, Warning, TEXT("VehicleListView widget not found! Make sure it's bound in the Blueprint."));
     }
-    
+
+    // Initialize fade overlay to transparent and non-blocking
+    if (Fade)
+    {
+        FLinearColor BrushColor = Fade->GetBrushColor();
+        BrushColor.A = 0.0f;  // Start transparent
+        Fade->SetBrushColor(BrushColor);
+
+        // Make sure it doesn't block input - never catches mouse events
+        Fade->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
+    else
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("Fade border not found! Make sure it's bound in the Blueprint."));
+    }
+
+    // Bind reset button
+    if (Reset_Button)
+    {
+        Reset_Button->OnClicked.AddDynamic(this, &URealGazeboMainWidget::OnResetButtonClicked);
+    }
+    else
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("Reset_Button not found! Make sure it's bound in the Blueprint."));
+    }
+
     // Start regular update timer
     if (UWorld* World = GetWorld())
     {
@@ -495,5 +524,66 @@ AVehicleBasePawn* URealGazeboMainWidget::FindVehiclePawnByID(const FVehicleID& V
     }
 
     return nullptr;
+}
+
+//----------------------------------------------------------
+// Reset Button & Fade Functionality
+//----------------------------------------------------------
+
+void URealGazeboMainWidget::OnResetButtonClicked()
+{
+    UE_LOG(LogRealGazeboUI, Log, TEXT("Reset button clicked - starting fade and reload"));
+
+    // Reset fade timer
+    FadeElapsedTime = 0.0f;
+
+    // Start fade animation timer (60 FPS for smooth animation)
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().SetTimer(
+            FadeTimerHandle,
+            this,
+            &URealGazeboMainWidget::UpdateFadeAlpha,
+            1.0f / 60.0f,  // Update at 60 FPS
+            true           // Loop
+        );
+    }
+}
+
+void URealGazeboMainWidget::UpdateFadeAlpha()
+{
+    FadeElapsedTime += (1.0f / 60.0f);
+    float Alpha = FMath::Clamp(FadeElapsedTime / FadeDuration, 0.0f, 1.0f);
+
+    // Update border alpha
+    if (Fade)
+    {
+        FLinearColor BrushColor = Fade->GetBrushColor();
+        BrushColor.A = Alpha;
+        Fade->SetBrushColor(BrushColor);
+    }
+
+    // When fade completes (fully opaque), reload level
+    if (Alpha >= 1.0f)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            World->GetTimerManager().ClearTimer(FadeTimerHandle);
+        }
+
+        ReloadCurrentLevel();
+    }
+}
+
+void URealGazeboMainWidget::ReloadCurrentLevel()
+{
+    UE_LOG(LogRealGazeboUI, Log, TEXT("Reloading current level"));
+
+    // Get current level name and reload it
+    FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(this);
+    UGameplayStatics::OpenLevel(this, FName(*CurrentLevelName));
+
+    // Note: After reload, NativeConstruct will be called again
+    // and Fade border will be reset to alpha 0 (transparent)
 }
 

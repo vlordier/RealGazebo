@@ -656,14 +656,20 @@ void ARealGazeboManager::UpdateStatusDisplay()
         if (bDidStartUI)
         {
             UIStatus = TEXT("Active");
+
+            // Update widget viewport status dynamically
+            UUserWidget* MainWidget = UISubsystem->GetActiveMainWidget();
+            WidgetInViewportStatus = (MainWidget != nullptr && MainWidget->IsInViewport());
         }
         else
         {
             UIStatus = TEXT("Not Started");
+            WidgetInViewportStatus = false;
         }
     }
     else
     {
         UIStatus = TEXT("No Subsystem");
+        WidgetInViewportStatus = false;
     }
 }

@@ -56,6 +56,14 @@ protected:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UListView> VehicleListView;
 
+    /** Reset button - triggers fade and level reload */
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<class UButton> Reset_Button;
+
+    /** Fade overlay border for screen transitions */
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<class UBorder> Fade;
+
 public:
     //----------------------------------------------------------
     // Configuration
@@ -68,6 +76,10 @@ public:
     /** Maximum number of vehicles to display */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Configuration")
     int32 MaxDisplayVehicles = 256;
+
+    /** Duration of fade animation in seconds */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reset")
+    float FadeDuration = 1.0f;
 
 
     //----------------------------------------------------------
@@ -159,6 +171,12 @@ protected:
     /** Timer handle for regular updates */
     FTimerHandle UpdateTimerHandle;
 
+    /** Timer for fade animation updates */
+    FTimerHandle FadeTimerHandle;
+
+    /** Elapsed time during fade animation */
+    float FadeElapsedTime;
+
     /** Last known vehicle count for change detection */
     int32 LastVehicleCount;
 
@@ -213,5 +231,18 @@ protected:
     /** Handle entry widget generation/recycling for proper selection state */
     void OnEntryWidgetGenerated(UUserWidget& GeneratedWidget);
 
+    //----------------------------------------------------------
+    // Reset Button & Fade Functionality
+    //----------------------------------------------------------
+
+    /** Reset button click handler */
+    UFUNCTION()
+    void OnResetButtonClicked();
+
+    /** Update fade alpha each frame */
+    void UpdateFadeAlpha();
+
+    /** Reload the current level */
+    void ReloadCurrentLevel();
 
 };
