@@ -1,3 +1,9 @@
+// Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
+// Author    : Gonapinuwala Lahiru Sandaruwan
+// Supervisor: Prof. SungTae Moon - Project lead & research supervision
+// Licensed under the BSD-3-Clause License.
+// See LICENSE file in the project root for full license information.
+
 /*
  * Live555 – LGPL v3 Compliance Notes
  * ----------------------------------
@@ -21,142 +27,103 @@ using UnrealBuildTool;
 
 public class Live555 : ModuleRules
 {
-    public Live555(ReadOnlyTargetRules Target) : base(Target)
-    {
-        Type = ModuleType.External;
+	public Live555(ReadOnlyTargetRules Target) : base(Target)
+	{
+		Type = ModuleType.External;
 
-        // LGPL v3 compliance - prominent notice (Section 4a)
-        PublicDefinitions.AddRange(new string[]
-        {
-            "LIVE555_LGPL_V3_LICENSED=1",
-            "LIVE555_VERSION=\"2025.09.17\"",
-            "LIVE555_COPYRIGHT=\"Live555 © 1996-2025 Live Networks, Inc. LGPL v3\"",
-            "LIVE555_LICENSE_INFO=\"See LICENSE file for license terms\""
-        });
+		string Live555Path = ModuleDirectory;
+		string IncludePath = Path.Combine(Live555Path, "Include");
 
-        // Live555 feature configuration
-        PublicDefinitions.AddRange(new string[]
-        {
-            "LIVE555_VIDEO_ONLY=1",
-            "LIVE555_MULTIPLE_STREAMS=1",
-            "LIVE555_CROSS_PLATFORM=1",
-            "NO_SSTREAM=1" // Avoid C++ sstream for compatibility
-        });
+		// Add include paths for each Live555 component
+		PublicSystemIncludePaths.Add(Path.Combine(IncludePath, "BasicUsageEnvironment"));
+		PublicSystemIncludePaths.Add(Path.Combine(IncludePath, "UsageEnvironment"));
+		PublicSystemIncludePaths.Add(Path.Combine(IncludePath, "groupsock"));
+		PublicSystemIncludePaths.Add(Path.Combine(IncludePath, "liveMedia"));
 
-        // Platform-specific socket definitions
-        if (Target.Platform == UnrealTargetPlatform.Win64)
-        {
-            PublicDefinitions.Add("SOCKLEN_T=int");
-            PublicSystemLibraries.AddRange(new string[] { "ws2_32.lib", "Iphlpapi.lib" });
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Linux)
-        {
-            PublicDefinitions.Add("SOCKLEN_T=socklen_t");
-        }
+		// Platform-specific library configuration
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			string LibraryPath = Path.Combine(Live555Path, "lib", "Win64");
 
-        // Live555 module paths
-        string Live555Path = Path.Combine(ModuleDirectory);
-        string IncludePath = Path.Combine(Live555Path, "Include");
-        string LibPath = Path.Combine(Live555Path, "lib");
+			// Order matters: link in dependency order
+			PublicAdditionalLibraries.Add(Path.Combine(LibraryPath, "liveMedia.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(LibraryPath, "groupsock.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(LibraryPath, "BasicUsageEnvironment.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(LibraryPath, "UsageEnvironment.lib"));
 
-        // Add all include directories
-        PublicIncludePaths.AddRange(new string[]
-        {
-            Path.Combine(IncludePath, "UsageEnvironment"),
-            Path.Combine(IncludePath, "BasicUsageEnvironment"),
-            Path.Combine(IncludePath, "groupsock"),
-            Path.Combine(IncludePath, "liveMedia")
-        });
+			// Windows socket library
+			PublicSystemLibraries.Add("ws2_32.lib");
+		}
+		else if (Target.Platform == UnrealTargetPlatform.Linux)
+		{
+			string LibraryPath = Path.Combine(Live555Path, "lib", "Linux");
 
-        // Platform-specific library linking
-        if (Target.Platform == UnrealTargetPlatform.Win64)
-        {
-            string Win64LibPath = Path.Combine(LibPath, "Win64");
-            PublicAdditionalLibraries.AddRange(new string[]
-            {
-                Path.Combine(Win64LibPath, "liveMedia.lib"),
-                Path.Combine(Win64LibPath, "groupsock.lib"),
-                Path.Combine(Win64LibPath, "BasicUsageEnvironment.lib"),
-                Path.Combine(Win64LibPath, "UsageEnvironment.lib")
-            });
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Linux)
-        {
-            string LinuxLibPath = Path.Combine(LibPath, "Linux");
-            PublicAdditionalLibraries.AddRange(new string[]
-            {
-                Path.Combine(LinuxLibPath, "libliveMedia.a"),
-                Path.Combine(LinuxLibPath, "libgroupsock.a"),
-                Path.Combine(LinuxLibPath, "libBasicUsageEnvironment.a"),
-                Path.Combine(LinuxLibPath, "libUsageEnvironment.a")
-            });
-        }
+			// Order matters: link in dependency order
+			PublicAdditionalLibraries.Add(Path.Combine(LibraryPath, "libliveMedia.a"));
+			PublicAdditionalLibraries.Add(Path.Combine(LibraryPath, "libgroupsock.a"));
+			PublicAdditionalLibraries.Add(Path.Combine(LibraryPath, "libBasicUsageEnvironment.a"));
+			PublicAdditionalLibraries.Add(Path.Combine(LibraryPath, "libUsageEnvironment.a"));
 
-        // Video streaming specific definitions
-        PublicDefinitions.AddRange(new string[]
-        {
-            "LIVE555_VIDEO_STREAMING=1",
-            "RTSP_CLIENT_ENABLED=1",
-            "MULTIPLE_VIDEO_SESSIONS=1",
+			// Linux system libraries
+			PublicSystemLibraries.Add("pthread");
+		}
 
-            // Video format support
-            "SUPPORT_H264=1",
-            "SUPPORT_H265=1",
-            "SUPPORT_MJPEG=1",
-            "SUPPORT_MPEG4=1",
-            "SUPPORT_RAW_VIDEO=1",
+		// ===== Live555 Configuration Defines =====
 
-            // Disable audio-related features
-            "NO_AUDIO_CODECS=1",
-            "DISABLE_MP3=1",
-            "DISABLE_AAC=1",
-            "DISABLE_AC3=1",
-            "DISABLE_AMR=1",
-            "DISABLE_GSM=1",
-            "DISABLE_QCELP=1",
-            "DISABLE_VORBIS=1"
-        });
+		// Enable Live555 integration
+		PublicDefinitions.Add("LIVE555_ENABLED=1");
 
-        // Cross-platform compatibility settings
-        PublicDefinitions.AddRange(new string[]
-        {
-            "USE_SIGNALS=0",
-            "NO_STD_LIB=0",
-            "LIVE555_THREAD_SAFE=1",
-            "ALLOW_RTSP_SERVER_PORT_REUSE=1",
-            "ALLOW_SERVER_PORT_REUSE=1",
-            "REUSE_FOR_TCP=1"
-        });
+		// Disable SSL/TLS support (no OpenSSL dependency)
+		PublicDefinitions.Add("NO_OPENSSL=1");
 
-        // Platform-specific compiler settings
-        if (Target.Platform == UnrealTargetPlatform.Win64)
-        {
-            PublicDefinitions.AddRange(new string[]
-            {
-                "_CRT_SECURE_NO_WARNINGS=1",
-                "WIN32_LEAN_AND_MEAN=1",
-                "_WINSOCK_DEPRECATED_NO_WARNINGS=1",
-                "_SCL_SECURE_NO_WARNINGS=1"
-            });
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Linux)
-        {
-            PublicDefinitions.Add("_GNU_SOURCE=1");
-        }
+		// Disable SRTP
+		PublicDefinitions.Add("NO_SRTP=1");
 
-        // Exclude unnecessary Live555 components
-        PublicDefinitions.AddRange(new string[]
-        {
-            "EXCLUDE_AUDIO_SINKS=1",
-            "EXCLUDE_AUDIO_SOURCES=1",
-            "EXCLUDE_AUDIO_FILTERS=1",
-            "EXCLUDE_TRANSCODING=1",
-            "EXCLUDE_FILE_STREAMING=1",
-            "EXCLUDE_SIP=1",
-            "EXCLUDE_RTCP_RR=1"
-        });
+		// Video-only mode
+		PublicDefinitions.Add("NO_AUDIO_SUPPORT=1");
 
-        // Debug and logging (disabled for production)
-        PublicDefinitions.Add("DEBUG_LEVEL=0");
-    }
+		// Optimize for H.264 video streaming
+		PublicDefinitions.Add("H264_VIDEO_ONLY=1");
+
+		// Disable unused media formats
+		PublicDefinitions.Add("NO_MPEG=1");
+		PublicDefinitions.Add("NO_DV=1");
+		PublicDefinitions.Add("NO_AC3=1");
+		PublicDefinitions.Add("NO_AMR=1");
+		PublicDefinitions.Add("NO_ADTS=1");
+		PublicDefinitions.Add("NO_MP3=1");
+		PublicDefinitions.Add("NO_WAV=1");
+		PublicDefinitions.Add("NO_QCELP=1");
+		PublicDefinitions.Add("NO_GSM=1");
+		PublicDefinitions.Add("NO_VORBIS=1");
+		PublicDefinitions.Add("NO_THEORA=1");
+		PublicDefinitions.Add("NO_OPUS=1");
+		PublicDefinitions.Add("NO_VP8=1");
+		PublicDefinitions.Add("NO_VP9=1");
+
+		// Performance optimizations
+		PublicDefinitions.Add("FAST_RTP_PROCESSING=1");
+		PublicDefinitions.Add("VIDEO_BUFFER_OPTIMIZED=1");
+
+		// Compiler settings
+		bEnableUndefinedIdentifierWarnings = false;
+		bEnableExceptions = false;
+
+		// Platform-specific optimizations
+		if (Target.Platform == UnrealTargetPlatform.Linux)
+		{
+			PublicDefinitions.Add("LINUX_NETWORKING_OPTIMIZED=1");
+			PublicDefinitions.Add("USE_EPOLL=1");
+		}
+		else if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PublicDefinitions.Add("USE_IOCP=1");
+			PublicDefinitions.Add("WINDOWS_NETWORKING_OPTIMIZED=1");
+		}
+
+		// Memory optimizations
+		PublicDefinitions.Add("MEMORY_OPTIMIZED_VIDEO_ONLY=1");
+		PublicDefinitions.Add("MAX_RTSP_CLIENTS=32");
+		PublicDefinitions.Add("ENABLE_FRAME_POOLING=1");
+	}
 }
