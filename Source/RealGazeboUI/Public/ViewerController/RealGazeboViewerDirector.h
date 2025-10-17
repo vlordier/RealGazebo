@@ -28,7 +28,6 @@ class URealGazeboCameraControllerComponent;
  * - Pawn switching between DefaultPawn and vehicles
  * - Integration with RealGazebo vehicle selection UI
  */
-
 UCLASS(BlueprintType, Blueprintable)
 class REALGAZEBOUI_API ARealGazeboViewerDirector : public AActor
 {

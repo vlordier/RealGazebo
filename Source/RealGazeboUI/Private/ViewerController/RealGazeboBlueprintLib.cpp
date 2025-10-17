@@ -27,7 +27,6 @@ void URealGazeboBlueprintLib::EnableInput(AActor* Actor)
     }
 }
 
-
 APlayerController* URealGazeboBlueprintLib::GetPlayerController(AActor* Actor)
 {
     if (!Actor)

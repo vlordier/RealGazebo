@@ -20,7 +20,6 @@ URealGazeboUISubsystem::URealGazeboUISubsystem()
 {
 }
 
-
 void URealGazeboUISubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);

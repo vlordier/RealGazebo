@@ -13,7 +13,7 @@
 #include "Components/Widget.h"
 #include "ViewerController/RealGazeboViewerDirector.h"
 #include "Widgets/RealGazeboMainWidget.h"
-#include "RealGazeboUI.h" 
+#include "RealGazeboUI.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRealGazeboCameraUIManager, Log, All);
 

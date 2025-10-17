@@ -31,7 +31,6 @@ class URealGazeboUISubsystem;
  * - Automatic subsystem configuration
  * - Blueprint-friendly setup functions
  */
-
 UCLASS(BlueprintType, Blueprintable, meta = (DisplayName = "RealGazebo Camera UI Manager"))
 class REALGAZEBOUI_API ARealGazeboCameraUIManager : public AActor
 {

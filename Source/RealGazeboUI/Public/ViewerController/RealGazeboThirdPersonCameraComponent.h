@@ -25,7 +25,6 @@
  * - Tag-based discovery by camera controller
  * - Blueprint events for activation/deactivation
  */
-
 UCLASS(BlueprintType, Blueprintable, ClassGroup=(Camera), meta=(BlueprintSpawnableComponent, DisplayName="RealGazebo Third Person Camera"))
 class REALGAZEBOUI_API URealGazeboThirdPersonCameraComponent : public USpringArmComponent
 {

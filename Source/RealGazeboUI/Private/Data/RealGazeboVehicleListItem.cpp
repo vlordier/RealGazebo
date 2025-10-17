@@ -68,3 +68,4 @@ FString URealGazeboVehicleListItem::GetFormattedStatus() const
     }
     return Status;
 }
+

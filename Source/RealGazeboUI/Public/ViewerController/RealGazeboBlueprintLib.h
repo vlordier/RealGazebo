@@ -18,7 +18,6 @@
  *
  * Provides runtime input binding for camera switching (M/F/B keys)
  */
-
 UCLASS()
 class REALGAZEBOUI_API URealGazeboBlueprintLib : public UBlueprintFunctionLibrary
 {

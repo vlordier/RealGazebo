@@ -15,7 +15,6 @@ DECLARE_LOG_CATEGORY_EXTERN(LogRealGazeboUI, Log, All);
  * RealGazebo UI Module
  * Provides UI components for vehicle data visualization and management
  */
-
 class FRealGazeboUIModule : public IModuleInterface
 {
 public:
@@ -35,7 +34,7 @@ private:
 
 	/** Handle module startup */
 	void RegisterUIComponents();
-	
+
 	/** Handle module shutdown */
 	void UnregisterUIComponents();
 };

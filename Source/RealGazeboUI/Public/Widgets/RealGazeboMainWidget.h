@@ -30,7 +30,6 @@ class ARealGazeboViewerDirector;
  * - ListView native selection with image-based visual feedback
  * - Optimized updates (30Hz default)
  */
-
 UCLASS(BlueprintType, Blueprintable)
 class REALGAZEBOUI_API URealGazeboMainWidget : public UUserWidget
 {
