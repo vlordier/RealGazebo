@@ -1,6 +1,5 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
-// Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
 // Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
@@ -17,18 +16,7 @@
 class URealGazeboSettings;
 class ARealGazeboManager;
 
-/**
- * Master subsystem for RealGazebo unified management
- *
- * Coordinates all RealGazebo subsystems (Bridge, UI) and provides
- * a unified API for manager actors and Blueprint access.
- *
- * Key Features:
- * - Orchestrates Bridge and UI subsystems
- * - Provides unified status monitoring
- * - Handles cross-module communication
- * - Blueprint-accessible API functions
- */
+
 UCLASS(BlueprintType)
 class REALGAZEBO_API URealGazeboSubsystem : public UWorldSubsystem
 {

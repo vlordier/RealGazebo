@@ -1,6 +1,5 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
-// Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
 // Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
@@ -139,51 +138,6 @@ void ARealGazeboManager::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
 }
 #endif
 
-//----------------------------------------------------------
-// Bridge Control API
-//----------------------------------------------------------
-
-void ARealGazeboManager::StartBridge()
-{
-    if (!BridgeSubsystem.IsValid())
-    {
-        UE_LOG(LogRealGazebo, Error, TEXT("Bridge subsystem not available"));
-        BridgeStatus = TEXT("Error - No Subsystem");
-        return;
-    }
-
-    // Configure Bridge settings
-    BridgeSubsystem->ListenPort = ListenPort;
-    BridgeSubsystem->bAutoSpawnVehicles = bAutoSpawnVehicles;
-    BridgeSubsystem->SetUpdateFrequency(UpdateFrequency);
-
-    // Convert unified DataTable to Bridge-compatible format
-    UDataTable* BridgeCompatibleTable = CreateBridgeCompatibleDataTable();
-    if (!BridgeCompatibleTable)
-    {
-        UE_LOG(LogRealGazebo, Error, TEXT("Failed to create Bridge-compatible DataTable"));
-        BridgeStatus = TEXT("Error - DataTable Conversion Failed");
-        return;
-    }
-
-    BridgeSubsystem->VehicleConfigTable = BridgeCompatibleTable;
-    ConfigureBridgePoolSettings();
-
-    BridgeSubsystem->StartBridge();
-    bDidStartBridge = BridgeSubsystem->IsBridgeActive();
-
-    if (bDidStartBridge)
-    {
-        BridgeStatus = TEXT("Active");
-        OnBridgeStarted.Broadcast(FBridgePoseData());
-        UE_LOG(LogRealGazebo, Log, TEXT("Bridge started successfully"));
-    }
-    else
-    {
-        BridgeStatus = TEXT("Failed to Start");
-        UE_LOG(LogRealGazebo, Warning, TEXT("Bridge failed to start"));
-    }
-}
 
 void ARealGazeboManager::StopBridge()
 {

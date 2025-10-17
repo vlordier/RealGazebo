@@ -1,6 +1,5 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
-// Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
 // Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
@@ -45,18 +44,6 @@ class REALGAZEBO_API ARealGazeboManager : public AActor
 public:
     ARealGazeboManager();
 
-    //----------------------------------------------------------
-    // Essential Configuration - Core Data Tables
-    //----------------------------------------------------------
-
-    /** Unified Vehicle Configuration DataTable
-     *  Contains ALL vehicle configuration: Bridge settings (motor/servo counts, pawn class)
-     *  AND UI display data (vehicle images/icons).
-     *
-     *  Replaces the previous two separate tables (VehicleDataTable + VehicleTypeImageDataTable).
-     *
-     *  DataTable Row Type: FRealGazeboVehicleConfigRow
-     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo",
               meta = (DisplayName = "Unified Vehicle Configuration", DisplayPriority = "1",
                      ToolTip = "Unified DataTable containing complete vehicle configurations for both Bridge operations and UI display. Uses FRealGazeboVehicleConfigRow structure."))

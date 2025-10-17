@@ -1,6 +1,5 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
-// Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
 // Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
@@ -15,11 +14,7 @@
 
 #define LOCTEXT_NAMESPACE "RealGazeboSettings"
 
-URealGazeboSettings::URealGazeboSettings()
-{
-    CategoryName = TEXT("Plugins");
-    SectionName = TEXT("RealGazebo");
-}
+
 
 #if WITH_EDITOR
 FText URealGazeboSettings::GetSectionText() const
@@ -58,10 +53,6 @@ void URealGazeboSettings::ResetToDefaults()
     bEnableCameraShortcuts = true;
     bEnableMainWidget = true;
 
-    // Performance settings
-    VehicleUpdateRate = 30.0f;
-    bEnableObjectPooling = true;
-    PoolSizePerType = 5;
 
     // Debug settings
     bShowPerformanceStats = false;

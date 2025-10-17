@@ -1,6 +1,5 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
-// Sub-author: MinKyu Kim
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
 // Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
@@ -14,15 +13,7 @@ DEFINE_LOG_CATEGORY(LogRealGazebo);
 
 FRealGazeboModule* FRealGazeboModule::ModuleInstance = nullptr;
 
-void FRealGazeboModule::StartupModule()
-{
-    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Main Module: StartupModule - Initializing master coordinator"));
 
-    ModuleInstance = this;
-    InitializeSubModules();
-
-    UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Main Module: Successfully initialized as master coordinator"));
-}
 
 void FRealGazeboModule::ShutdownModule()
 {
