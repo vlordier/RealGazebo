@@ -27,6 +27,7 @@ class APlayerController;
  * - Persistent across level changes
  * - Automatic initialization and cleanup
  */
+
 UCLASS()
 class REALGAZEBOUI_API URealGazeboUISubsystem : public UGameInstanceSubsystem
 {

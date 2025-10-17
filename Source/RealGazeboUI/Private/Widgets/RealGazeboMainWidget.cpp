@@ -585,4 +585,3 @@ void URealGazeboMainWidget::ReloadCurrentLevel()
     // Note: After reload, NativeConstruct will be called again
     // and Fade border will be reset to alpha 0 (transparent)
 }
-

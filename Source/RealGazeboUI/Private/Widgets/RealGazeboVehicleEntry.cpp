@@ -416,4 +416,3 @@ void URealGazeboVehicleEntry::UpdateSelectionImage()
         }
     }
 }
-

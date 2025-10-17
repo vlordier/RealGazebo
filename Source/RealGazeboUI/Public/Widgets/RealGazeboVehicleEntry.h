@@ -27,6 +27,7 @@
  * - Connection status
  * - Visual status indicators
  */
+
 UCLASS(BlueprintType, Blueprintable)
 class REALGAZEBOUI_API URealGazeboVehicleEntry : public UUserWidget, public IUserObjectListEntry
 {

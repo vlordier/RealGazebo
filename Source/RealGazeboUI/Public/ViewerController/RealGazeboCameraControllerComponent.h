@@ -40,6 +40,7 @@ enum class ECameraMode : uint8
  * - Blueprint-accessible camera control functions
  * - Event system for camera state changes
  */
+
 UCLASS(BlueprintType, Blueprintable, ClassGroup=(Camera), meta=(BlueprintSpawnableComponent, DisplayName="RealGazebo Camera Controller"))
 class REALGAZEBOUI_API URealGazeboCameraControllerComponent : public UActorComponent
 {

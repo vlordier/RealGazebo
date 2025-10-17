@@ -11,24 +11,40 @@
 
 DEFINE_LOG_CATEGORY(LogRealGazeboUI);
 
+FRealGazeboUIModule* FRealGazeboUIModule::ModuleInstance = nullptr;
+
 void FRealGazeboUIModule::StartupModule()
 {
-	UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboUI module starting up"));
+	UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboUI Module: StartupModule - Initializing UI components"));
+
+	ModuleInstance = this;
 
 	// Register UI components
 	RegisterUIComponents();
 
-	UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboUI module started successfully"));
+	UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboUI Module: Successfully initialized"));
 }
 
 void FRealGazeboUIModule::ShutdownModule()
 {
-	UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboUI module shutting down"));
+	UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboUI Module: ShutdownModule - Cleaning up UI components"));
 
 	// Unregister UI components
 	UnregisterUIComponents();
 
-	UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboUI module shut down"));
+	ModuleInstance = nullptr;
+
+	UE_LOG(LogRealGazeboUI, Log, TEXT("RealGazeboUI Module: Successfully shut down"));
+}
+
+FRealGazeboUIModule& FRealGazeboUIModule::Get()
+{
+	return FModuleManager::LoadModuleChecked<FRealGazeboUIModule>("RealGazeboUI");
+}
+
+bool FRealGazeboUIModule::IsAvailable()
+{
+	return FModuleManager::Get().IsModuleLoaded("RealGazeboUI");
 }
 
 void FRealGazeboUIModule::RegisterUIComponents()
