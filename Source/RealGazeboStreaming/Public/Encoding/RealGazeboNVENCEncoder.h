@@ -37,9 +37,9 @@ namespace AVEncoder
  * Supports direct GPU texture input via CUDA for zero-copy encoding.
  *
  * Platform Support:
- * - Linux + Vulkan: Uses CUDA context with Vulkan→CUDA texture interop
- * - Windows + D3D12: Uses CUDA context with D3D12→CUDA texture interop
- * - Windows + D3D11: Uses CUDA context with D3D11→CUDA texture interop
+ * - Linux + Vulkan: Uses CUDA context with Vulkan->CUDA texture interop
+ * - Windows + D3D12: Uses CUDA context with D3D12->CUDA texture interop
+ * - Windows + D3D11: Uses CUDA context with D3D11->CUDA texture interop
  *
  * Features:
  * - Hardware accelerated encoding on NVIDIA GPUs

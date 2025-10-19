@@ -12,21 +12,22 @@
 #include "RealGazeboBridge.h"
 
 UDataStreamProcessor::UDataStreamProcessor()
+    : TotalValidPosePackets(0)         // Atomic initialization
+    , TotalValidMotorPackets(0)        // Atomic initialization
+    , TotalValidServoPackets(0)        // Atomic initialization
+    , TotalInvalidPackets(0)           // Atomic initialization
+    , TotalDestroyedVehicles(0)        // Atomic initialization
+    , PacketCountSinceLastUpdate(0)    // Atomic initialization
+    , ProcessedBatches(0)              // Atomic initialization
 {
     UDPReceiver = nullptr;
-    
-    // Initialize statistics
-    TotalValidPosePackets = 0;
-    TotalValidMotorPackets = 0;
-    TotalValidServoPackets = 0;
-    TotalInvalidPackets = 0;
+
+    // Initialize non-atomic statistics
     PacketsPerSecond = 0.0f;
-    
+
     // Initialize performance tracking
     LastStatsUpdate = 0.0;
-    PacketCountSinceLastUpdate = 0;
     TotalProcessingTime = 0.0f;
-    ProcessedBatches = 0;
 }
 
 void UDataStreamProcessor::Initialize(UGazeboBridgeSubsystem* InBridgeSubsystem)
@@ -192,6 +193,27 @@ void UDataStreamProcessor::ProcessSinglePacket(const FUDPData& PacketData)
             LogPacketError(TEXT("Packet too small"), PacketData.Data);
         }
         return;
+    }
+
+    // **SPECIAL CASE: 3-byte header-only packet = Destroy Vehicle Command**
+    if (PacketData.Data.Num() == PACKET_HEADER_SIZE)
+    {
+        uint8 VehicleNum = PacketData.Data[0];
+        uint8 VehicleType = PacketData.Data[1];
+        // MessageID (byte 2) is ignored for destroy packets
+
+        FVehicleID VehicleID(VehicleNum, VehicleType);
+
+        // Call subsystem to remove/destroy the vehicle
+        if (UGazeboBridgeSubsystem* Subsystem = BridgeSubsystem.Get())
+        {
+            Subsystem->RemoveVehicle(VehicleID);
+            TotalDestroyedVehicles++;  // Increment destroy counter
+            UE_LOG(LogRealGazeboBridge, Display, TEXT("Destroy command received (3-byte packet): Type=%d, Num=%d"),
+                   VehicleType, VehicleNum);
+        }
+
+        return; // Packet processed - vehicle destroyed
     }
 
     uint8 VehicleNum, VehicleType, MessageID;
@@ -503,27 +525,34 @@ int32 UDataStreamProcessor::GetExpectedServoPacketSize(uint8 VehicleType) const
     return 0;
 }
 
-void UDataStreamProcessor::GetNetworkStatistics(int32& OutValidPackets, int32& OutInvalidPackets, 
+void UDataStreamProcessor::GetNetworkStatistics(int32& OutValidPackets, int32& OutInvalidPackets,
                                               float& OutPacketsPerSecond, float& OutAverageProcessingTime) const
 {
-    OutValidPackets = TotalValidPosePackets + TotalValidMotorPackets + TotalValidServoPackets;
-    OutInvalidPackets = TotalInvalidPackets;
+    // Read atomic counters using load()
+    OutValidPackets = TotalValidPosePackets.load() + TotalValidMotorPackets.load() + TotalValidServoPackets.load();
+    OutInvalidPackets = TotalInvalidPackets.load();
     OutPacketsPerSecond = PacketsPerSecond;
-    OutAverageProcessingTime = ProcessedBatches > 0 ? (TotalProcessingTime / ProcessedBatches) : 0.0f;
+
+    // Safe read of ProcessedBatches
+    const int32 Batches = ProcessedBatches.load();
+    OutAverageProcessingTime = Batches > 0 ? (TotalProcessingTime / Batches) : 0.0f;
 }
 
 void UDataStreamProcessor::ResetStatistics()
 {
-    TotalValidPosePackets = 0;
-    TotalValidMotorPackets = 0;
-    TotalValidServoPackets = 0;
-    TotalInvalidPackets = 0;
+    // Reset atomic counters using store()
+    TotalValidPosePackets.store(0);
+    TotalValidMotorPackets.store(0);
+    TotalValidServoPackets.store(0);
+    TotalInvalidPackets.store(0);
+    TotalDestroyedVehicles.store(0);
+    PacketCountSinceLastUpdate.store(0);
+    ProcessedBatches.store(0);
+
+    // Reset non-atomic statistics
     PacketsPerSecond = 0.0f;
-    
     LastStatsUpdate = FPlatformTime::Seconds();
-    PacketCountSinceLastUpdate = 0;
     TotalProcessingTime = 0.0f;
-    ProcessedBatches = 0;
 }
 
 
@@ -554,10 +583,17 @@ void UDataStreamProcessor::LogPacketError(const FString& ErrorMessage, const TAr
 
 void UDataStreamProcessor::LogPacketStatistics() const
 {
-    const int32 TotalValid = TotalValidPosePackets + TotalValidMotorPackets + TotalValidServoPackets;
-    const int32 TotalProcessed = TotalValid + TotalInvalidPackets;
+    // Read atomic counters safely
+    const int32 ValidPose = TotalValidPosePackets.load();
+    const int32 ValidMotor = TotalValidMotorPackets.load();
+    const int32 ValidServo = TotalValidServoPackets.load();
+    const int32 Invalid = TotalInvalidPackets.load();
+    const int32 Destroyed = TotalDestroyedVehicles.load();
+
+    const int32 TotalValid = ValidPose + ValidMotor + ValidServo;
+    const int32 TotalProcessed = TotalValid + Invalid + Destroyed;
     const float SuccessRate = TotalProcessed > 0 ? (float(TotalValid) / TotalProcessed * 100.0f) : 0.0f;
-    
-    UE_LOG(LogRealGazeboBridge, Log, TEXT("DataStreamProcessor Stats: Valid=%d, Invalid=%d, Rate=%.1f%%, PPS=%.1f"), 
-           TotalValid, TotalInvalidPackets, SuccessRate, PacketsPerSecond);
+
+    UE_LOG(LogRealGazeboBridge, Log, TEXT("DataStreamProcessor Stats: Valid=%d, Invalid=%d, Destroyed=%d, Rate=%.1f%%, PPS=%.1f"),
+           TotalValid, Invalid, Destroyed, SuccessRate, PacketsPerSecond);
 }

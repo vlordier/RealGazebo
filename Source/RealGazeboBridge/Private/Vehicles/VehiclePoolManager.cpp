@@ -238,8 +238,60 @@ void UVehiclePoolManager::ReleaseVehicle(AVehicleBasePawn* Vehicle)
     // Update statistics
     ReleaseCount.FindOrAdd(VehicleType)++;
     
-    UE_LOG(LogRealGazeboBridge, VeryVerbose, TEXT("Released vehicle type %d - Active: %d, Available: %d"), 
+    UE_LOG(LogRealGazeboBridge, VeryVerbose, TEXT("Released vehicle type %d - Active: %d, Available: %d"),
            VehicleType, ActivePool->Num(), AvailablePool->Num());
+}
+
+void UVehiclePoolManager::DestroyVehicleActor(AVehicleBasePawn* Vehicle)
+{
+    if (!IsValid(Vehicle))
+    {
+        return;
+    }
+
+    // Find vehicle type
+    uint8* VehicleTypePtr = PawnToTypeMap.Find(Vehicle);
+    if (!VehicleTypePtr)
+    {
+        UE_LOG(LogRealGazeboBridge, Warning, TEXT("Cannot destroy vehicle - type not found in pool tracking"));
+        return;
+    }
+
+    const uint8 VehicleType = *VehicleTypePtr;
+
+    // Remove from type mapping
+    PawnToTypeMap.Remove(Vehicle);
+
+    // Remove from active pool if present
+    TArray<AVehicleBasePawn*>* ActivePool = ActivePawnPools.Find(VehicleType);
+    if (ActivePool)
+    {
+        const int32 RemovedCount = ActivePool->RemoveAll([Vehicle](AVehicleBasePawn* Actor) {
+            return Actor == Vehicle;
+        });
+
+        if (RemovedCount > 0)
+        {
+            UE_LOG(LogRealGazeboBridge, Verbose, TEXT("Vehicle type %d removed from active pool for destruction - Active: %d"),
+                   VehicleType, ActivePool->Num());
+        }
+    }
+
+    // Also remove from available pool if somehow present (shouldn't normally happen)
+    TArray<AVehicleBasePawn*>* AvailablePool = AvailablePawnPools.Find(VehicleType);
+    if (AvailablePool)
+    {
+        const int32 RemovedCount = AvailablePool->RemoveAll([Vehicle](AVehicleBasePawn* Actor) {
+            return Actor == Vehicle;
+        });
+
+        if (RemovedCount > 0)
+        {
+            UE_LOG(LogRealGazeboBridge, Warning, TEXT("Vehicle type %d removed from available pool (unexpected)"), VehicleType);
+        }
+    }
+
+    UE_LOG(LogRealGazeboBridge, Verbose, TEXT("Vehicle actor removed from pool tracking (ready for destruction)"));
 }
 
 void UVehiclePoolManager::ReleaseAllActiveVehicles()

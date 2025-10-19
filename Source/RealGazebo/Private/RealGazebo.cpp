@@ -13,7 +13,15 @@ DEFINE_LOG_CATEGORY(LogRealGazebo);
 
 FRealGazeboModule* FRealGazeboModule::ModuleInstance = nullptr;
 
+void FRealGazeboModule::StartupModule()
+{
+	UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Main Module: StartupModule - Initializing master coordinator"));
 
+	ModuleInstance = this;
+	InitializeSubModules();
+
+	UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Main Module: Successfully initialized"));
+}
 
 void FRealGazeboModule::ShutdownModule()
 {
@@ -98,7 +106,7 @@ void FRealGazeboModule::ShutdownSubModules()
 {
     UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Main Module: Coordinating sub-modules shutdown"));
 
-    // Shutdown in reverse order (UI → Streaming → Bridge)
+    // Shutdown in reverse order (UI -> Streaming -> Bridge)
 
     // Shutdown UI module first
     if (FModuleManager::Get().IsModuleLoaded(TEXT("RealGazeboUI")))

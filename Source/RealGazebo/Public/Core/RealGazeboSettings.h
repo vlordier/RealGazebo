@@ -32,9 +32,12 @@ public:
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "General", meta = (DisplayName = "Enable Debug Mode"))
     bool bEnableDebugMode = false;
 
-    /** Maximum number of simultaneous vehicles (UDP protocol limit) */
-    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "General", meta = (DisplayName = "Max Vehicles", ClampMin = "1", ClampMax = "255"))
-    int32 MaxVehicles = 255;
+    /** Maximum number of simultaneous vehicles
+     *  Protocol supports up to 65,536 vehicles (256 types x 256 instances per type)
+     */
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "General", meta = (DisplayName = "Max Vehicles", ClampMin = "1", ClampMax = "65536",
+                      ToolTip = "Maximum total vehicles. Protocol supports up to 65,536 (256 types x 256 instances). Adjust based on performance requirements."))
+    int32 MaxVehicles = 65536;
 
     //----------------------------------------------------------
     // Bridge Settings
@@ -88,9 +91,12 @@ public:
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Performance", meta = (DisplayName = "Enable Object Pooling"))
     bool bEnableObjectPooling = true;
 
-    /** Maximum pool size per vehicle type */
-    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Performance", meta = (DisplayName = "Pool Size Per Type", ClampMin = "1", ClampMax = "50", EditCondition = "bEnableObjectPooling"))
-    int32 PoolSizePerType = 5;
+    /** Maximum pool size per vehicle type
+     *  Protocol supports 256 instances per type
+     */
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Performance", meta = (DisplayName = "Pool Size Per Type", ClampMin = "1", ClampMax = "256", EditCondition = "bEnableObjectPooling",
+                      ToolTip = "Maximum pooled actors per vehicle type (protocol supports 256 instances per type)"))
+    int32 PoolSizePerType = 20;
 
     //----------------------------------------------------------
     // Developer Settings

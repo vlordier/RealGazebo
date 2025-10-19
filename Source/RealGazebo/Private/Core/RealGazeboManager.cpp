@@ -139,6 +139,44 @@ void ARealGazeboManager::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
 #endif
 
 
+void ARealGazeboManager::StartBridge()
+{
+    if (!BridgeSubsystem.IsValid())
+    {
+        UE_LOG(LogRealGazebo, Error, TEXT("Cannot start bridge - Bridge subsystem not available"));
+        BridgeStatus = TEXT("Error - No Subsystem");
+        return;
+    }
+
+    // Convert unified DataTable to Bridge-compatible format
+    UDataTable* BridgeCompatibleTable = CreateBridgeCompatibleDataTable();
+    if (!BridgeCompatibleTable)
+    {
+        UE_LOG(LogRealGazebo, Error, TEXT("Failed to create Bridge-compatible DataTable"));
+        BridgeStatus = TEXT("Error - DataTable Conversion Failed");
+        return;
+    }
+
+    // Configure bridge subsystem with the DataTable
+    BridgeSubsystem->VehicleConfigTable = BridgeCompatibleTable;
+    BridgeSubsystem->ListenPort = ListenPort;
+    BridgeSubsystem->ServerIPAddress = ServerIPAddress;
+    BridgeSubsystem->bAutoSpawnVehicles = bAutoSpawnVehicles;
+    BridgeSubsystem->SetUpdateFrequency(UpdateFrequency);
+
+    // Configure pool settings
+    ConfigureBridgePoolSettings();
+
+    // Start the bridge
+    BridgeSubsystem->StartBridge();
+
+    bDidStartBridge = true;
+    BridgeStatus = TEXT("Active");
+    OnBridgeStarted.Broadcast(FBridgePoseData());
+
+    UE_LOG(LogRealGazebo, Log, TEXT("Bridge started on port %d"), ListenPort);
+}
+
 void ARealGazeboManager::StopBridge()
 {
     if (BridgeSubsystem.IsValid())

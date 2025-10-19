@@ -61,6 +61,9 @@ public:
     /** Release actor back to the pool */
     void ReleaseVehicle(AVehicleBasePawn* Vehicle);
 
+    /** Remove actor from pool tracking (used before destroying the actor completely) */
+    void DestroyVehicleActor(AVehicleBasePawn* Vehicle);
+
     /** Force release all active actors */
     void ReleaseAllActiveVehicles();
 
@@ -87,21 +90,26 @@ public:
     // Configuration
     //----------------------------------------------------------
 
-    /** Maximum actors per pool type */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool|Configuration")
-    int32 MaxActorsPerType = 100;
+    /** Maximum actors per pool type
+     *  Protocol supports 256 instances per vehicle type (VehicleNum 0-255)
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool|Configuration",
+              meta = (ToolTip = "Maximum pooled actors per vehicle type (protocol supports 256 instances per type)"))
+    int32 MaxActorsPerType = 256;
 
     /** Initial pool size per type */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool|Configuration")
-    int32 InitialPoolSize = 10;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool|Configuration",
+              meta = (ClampMin = "5", ClampMax = "256", ToolTip = "Initial number of pooled actors to pre-allocate per vehicle type"))
+    int32 InitialPoolSize = 20;
 
     /** Auto-expand pool when needed */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool|Configuration")
     bool bAutoExpandPools = true;
 
     /** Pool expansion increment */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool|Configuration")
-    int32 PoolExpansionSize = 5;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool|Configuration",
+              meta = (ClampMin = "1", ClampMax = "100", ToolTip = "Number of actors to add when expanding pool"))
+    int32 PoolExpansionSize = 10;
 
     /** Enable pool shrinking when actors are unused */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool|Configuration")

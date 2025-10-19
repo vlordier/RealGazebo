@@ -14,7 +14,11 @@
 
 #define LOCTEXT_NAMESPACE "RealGazeboSettings"
 
-
+URealGazeboSettings::URealGazeboSettings()
+{
+	// Default initialization handled by UPROPERTY defaults in header
+	// Constructor provided for linker vtable generation
+}
 
 #if WITH_EDITOR
 FText URealGazeboSettings::GetSectionText() const
@@ -39,7 +43,7 @@ void URealGazeboSettings::ResetToDefaults()
     // General settings
     bEnableRealGazebo = true;
     bEnableDebugMode = false;
-    MaxVehicles = 255;
+    MaxVehicles = 65536; // Protocol maximum: 256 types x 256 instances
 
     // Bridge settings
     bEnableBridge = true;
@@ -53,6 +57,10 @@ void URealGazeboSettings::ResetToDefaults()
     bEnableCameraShortcuts = true;
     bEnableMainWidget = true;
 
+    // Performance settings
+    VehicleUpdateRate = 30.0f;
+    bEnableObjectPooling = true;
+    PoolSizePerType = 20; // Increased from 5 to support more vehicles per type
 
     // Debug settings
     bShowPerformanceStats = false;

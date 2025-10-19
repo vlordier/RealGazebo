@@ -17,6 +17,7 @@
 #include "HAL/Runnable.h"
 #include "HAL/RunnableThread.h"
 #include "Containers/Queue.h"
+#include <atomic>  // C++11 atomic operations for lock-free thread safety
 #include "UDPReceiver.generated.h"
 
 USTRUCT(BlueprintType)
@@ -77,10 +78,10 @@ protected:
     FSocket* ListenSocket;
     FRunnableThread* ReceiverThread;
     ISocketSubsystem* SocketSubsystem;
-    
-    // Thread control
-    bool bStopRequested;
-    bool bIsListening;
+
+    // Thread control (atomic for lock-free thread safety)
+    std::atomic<bool> bStopRequested;
+    std::atomic<bool> bIsListening;
     int32 ListenPort;
     
     // IP filtering

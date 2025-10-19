@@ -29,7 +29,7 @@ FIntPoint FRealGazeboStreamingUtils::GetResolutionDimensions(EStreamResolution R
 		case EStreamResolution::R4_3_480p:   return FIntPoint(640, 480);   // VGA
 		case EStreamResolution::R4_3_600p:   return FIntPoint(800, 600);   // SVGA
 		case EStreamResolution::R4_3_768p:   return FIntPoint(1024, 768);  // XGA
-		case EStreamResolution::R4_3_960p:   return FIntPoint(1280, 960);  // SXGA−
+		case EStreamResolution::R4_3_960p:   return FIntPoint(1280, 960);  // SXGA-
 		case EStreamResolution::R4_3_1050p:  return FIntPoint(1400, 1050); // SXGA+
 		case EStreamResolution::R4_3_1200p:  return FIntPoint(1600, 1200); // UXGA
 		case EStreamResolution::R4_3_1440p:  return FIntPoint(1920, 1440); // QXGA
@@ -51,7 +51,7 @@ int32 FRealGazeboStreamingUtils::CalculateBitrate(EStreamResolution Resolution, 
 
 	// Base bitrate calculation: ~0.1 bits per pixel for High quality at 30 FPS
 	// This is a industry-standard formula for H.264 bitrate estimation
-	// Formula: Bitrate (kbps) = (Width × Height × BitsPerPixel × FPS) / 1000
+	// Formula: Bitrate (kbps) = (Width x Height x BitsPerPixel x FPS) / 1000
 	// For High quality: ~0.1 bpp, Medium: ~0.075 bpp, Low: ~0.05 bpp, Ultra: ~0.15 bpp
 
 	float BitsPerPixel = 0.1f;  // Baseline for High quality
@@ -66,7 +66,7 @@ int32 FRealGazeboStreamingUtils::CalculateBitrate(EStreamResolution Resolution, 
 		case EStreamQuality::Ultra:  BitsPerPixel = 0.15f;  break;  // 150% of High
 	}
 
-	// Calculate bitrate: (Pixels × BPP × FPS) / 1000 = kbps
+	// Calculate bitrate: (Pixels x BPP x FPS) / 1000 = kbps
 	float BitrateKbps = (TotalPixels * BitsPerPixel * AssumedFPS) / 1000.0f;
 
 	// Apply minimum/maximum constraints

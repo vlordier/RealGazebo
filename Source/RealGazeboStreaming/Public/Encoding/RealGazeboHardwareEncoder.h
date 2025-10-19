@@ -19,7 +19,7 @@
  * Zero-Copy GPU Texture Encoding:
  * - Direct GPU texture input via FTexture2DRHIRef
  * - No CPU readback or color conversion
- * - NVENC uses CUDA interop (Vulkan/D3D → CUDA)
+ * - NVENC uses CUDA interop (Vulkan/D3D -> CUDA)
  * - AMF uses native RHI (Vulkan/D3D direct)
  *
  * Software encoders are NOT supported in RealGazeboStreaming.

@@ -36,77 +36,77 @@ enum class EStreamResolution : uint8
 	//========================================================================
 
 	/** 426x240 - 240p SD (16:9) */
-	R16_9_240p UMETA(DisplayName = "240p (426×240) SD"),
+	R16_9_240p UMETA(DisplayName = "240p (426x240) SD"),
 
 	/** 640x360 - nHD (16:9) */
-	R16_9_360p UMETA(DisplayName = "360p (640×360) nHD"),
+	R16_9_360p UMETA(DisplayName = "360p (640x360) nHD"),
 
 	/** 854x480 - FWVGA (16:9) */
-	R16_9_480p UMETA(DisplayName = "480p (854×480) FWVGA"),
+	R16_9_480p UMETA(DisplayName = "480p (854x480) FWVGA"),
 
 	/** 960x540 - qHD (16:9) */
-	R16_9_540p UMETA(DisplayName = "540p (960×540) qHD"),
+	R16_9_540p UMETA(DisplayName = "540p (960x540) qHD"),
 
 	/** 1024x576 - WSVGA (16:9) */
-	R16_9_576p UMETA(DisplayName = "576p (1024×576) WSVGA"),
+	R16_9_576p UMETA(DisplayName = "576p (1024x576) WSVGA"),
 
 	/** 1280x720 - HD (16:9) */
-	R16_9_720p UMETA(DisplayName = "720p (1280×720) HD"),
+	R16_9_720p UMETA(DisplayName = "720p (1280x720) HD"),
 
 	/** 1366x768 - FWXGA (16:9) */
-	R16_9_768p UMETA(DisplayName = "768p (1366×768) FWXGA"),
+	R16_9_768p UMETA(DisplayName = "768p (1366x768) FWXGA"),
 
 	/** 1600x900 - HD+ (16:9) */
-	R16_9_900p UMETA(DisplayName = "900p (1600×900) HD+"),
+	R16_9_900p UMETA(DisplayName = "900p (1600x900) HD+"),
 
 	/** 1920x1080 - Full HD (16:9) */
-	R16_9_1080p UMETA(DisplayName = "1080p (1920×1080) Full HD"),
+	R16_9_1080p UMETA(DisplayName = "1080p (1920x1080) Full HD"),
 
 	/** 2560x1440 - QHD/2K (16:9) */
-	R16_9_1440p UMETA(DisplayName = "1440p (2560×1440) QHD/2K"),
+	R16_9_1440p UMETA(DisplayName = "1440p (2560x1440) QHD/2K"),
 
 	/** 3200x1800 - QHD+ (16:9) */
-	R16_9_1800p UMETA(DisplayName = "1800p (3200×1800) QHD+"),
+	R16_9_1800p UMETA(DisplayName = "1800p (3200x1800) QHD+"),
 
 	/** 3840x2160 - 4K UHD (16:9) */
-	R16_9_2160p UMETA(DisplayName = "2160p (3840×2160) 4K UHD"),
+	R16_9_2160p UMETA(DisplayName = "2160p (3840x2160) 4K UHD"),
 
 	//========================================================================
 	// 4:3 Resolutions (11 total)
 	//========================================================================
 
 	/** 320x240 - QVGA (4:3) */
-	R4_3_240p UMETA(DisplayName = "240p (320×240) QVGA"),
+	R4_3_240p UMETA(DisplayName = "240p (320x240) QVGA"),
 
 	/** 640x480 - VGA (4:3) */
-	R4_3_480p UMETA(DisplayName = "480p (640×480) VGA"),
+	R4_3_480p UMETA(DisplayName = "480p (640x480) VGA"),
 
 	/** 800x600 - SVGA (4:3) */
-	R4_3_600p UMETA(DisplayName = "600p (800×600) SVGA"),
+	R4_3_600p UMETA(DisplayName = "600p (800x600) SVGA"),
 
 	/** 1024x768 - XGA (4:3) */
-	R4_3_768p UMETA(DisplayName = "768p (1024×768) XGA"),
+	R4_3_768p UMETA(DisplayName = "768p (1024x768) XGA"),
 
-	/** 1280x960 - SXGA− (4:3) */
-	R4_3_960p UMETA(DisplayName = "960p (1280×960) SXGA−"),
+	/** 1280x960 - SXGA- (4:3) */
+	R4_3_960p UMETA(DisplayName = "960p (1280x960) SXGA-"),
 
 	/** 1400x1050 - SXGA+ (4:3) */
-	R4_3_1050p UMETA(DisplayName = "1050p (1400×1050) SXGA+"),
+	R4_3_1050p UMETA(DisplayName = "1050p (1400x1050) SXGA+"),
 
 	/** 1600x1200 - UXGA (4:3) */
-	R4_3_1200p UMETA(DisplayName = "1200p (1600×1200) UXGA"),
+	R4_3_1200p UMETA(DisplayName = "1200p (1600x1200) UXGA"),
 
 	/** 1920x1440 - QXGA (4:3) */
-	R4_3_1440p UMETA(DisplayName = "1440p (1920×1440) QXGA"),
+	R4_3_1440p UMETA(DisplayName = "1440p (1920x1440) QXGA"),
 
 	/** 2048x1536 - QXGA (4:3) */
-	R4_3_1536p UMETA(DisplayName = "1536p (2048×1536) QXGA"),
+	R4_3_1536p UMETA(DisplayName = "1536p (2048x1536) QXGA"),
 
 	/** 2560x1920 - QSXGA (4:3) */
-	R4_3_1920p UMETA(DisplayName = "1920p (2560×1920) QSXGA"),
+	R4_3_1920p UMETA(DisplayName = "1920p (2560x1920) QSXGA"),
 
 	/** 3200x2400 - QUXGA (4:3) */
-	R4_3_2400p UMETA(DisplayName = "2400p (3200×2400) QUXGA")
+	R4_3_2400p UMETA(DisplayName = "2400p (3200x2400) QUXGA")
 };
 
 /**

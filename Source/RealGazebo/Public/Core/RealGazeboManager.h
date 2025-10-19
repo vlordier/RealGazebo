@@ -87,8 +87,8 @@ public:
 
     /** Number of packets to process per batch */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Network|Processing",
-              meta = (DisplayName = "Batch Size", DisplayPriority = "2", ClampMin = "1", ClampMax = "100", EditCondition = "bEnableBatchProcessing"))
-    int32 BatchSize = 10;
+              meta = (DisplayName = "Batch Size", DisplayPriority = "2", ClampMin = "1", ClampMax = "1000", EditCondition = "bEnableBatchProcessing"))
+    int32 BatchSize = 50;
 
     /** Batch processing interval in seconds (affects responsiveness) */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Network|Processing",
@@ -105,25 +105,26 @@ public:
               meta = (DisplayName = "Update Frequency", DisplayPriority = "1", ClampMin = "10.0", ClampMax = "120.0"))
     float UpdateFrequency = 60.0f;
 
-    /** Maximum number of active vehicles allowed simultaneously */
+    /** Maximum number of active vehicles allowed simultaneously
+     *  Protocol supports up to 65,536 vehicles (256 types x 256 instances per type)
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Limits",
-              meta = (DisplayName = "Max Active Vehicles", DisplayPriority = "1", ClampMin = "1", ClampMax = "255"))
-    int32 MaxActiveVehicles = 255;
+              meta = (DisplayName = "Max Active Vehicles", DisplayPriority = "1", ClampMin = "1", ClampMax = "65536",
+                      ToolTip = "Maximum total active vehicles. Protocol supports up to 65,536 (256 types x 256 instances). Adjust based on performance requirements."))
+    int32 MaxActiveVehicles = 65536;
 
-    /** Use asynchronous processing for network data */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Limits",
-              meta = (DisplayName = "Use Async Processing", DisplayPriority = "3", AdvancedDisplay))
-    bool bUseAsyncProcessing = true;
-
-    /** Maximum actors per vehicle type in the pool */
+    /** Maximum actors per vehicle type in the pool
+     *  With protocol supporting 256 instances per type, pool can hold up to 256 per type
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
-              meta = (DisplayName = "Max Actors Per Type", DisplayPriority = "1", ClampMin = "10", ClampMax = "255"))
-    int32 MaxActorsPerType = 100;
+              meta = (DisplayName = "Max Actors Per Type", DisplayPriority = "1", ClampMin = "10", ClampMax = "256",
+                      ToolTip = "Maximum pooled actors per vehicle type (protocol supports 256 instances per type)"))
+    int32 MaxActorsPerType = 256;
 
     /** Initial pool size per vehicle type */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
-              meta = (DisplayName = "Initial Pool Size", DisplayPriority = "2", ClampMin = "5", ClampMax = "100"))
-    int32 InitialPoolSize = 10;
+              meta = (DisplayName = "Initial Pool Size", DisplayPriority = "2", ClampMin = "5", ClampMax = "256"))
+    int32 InitialPoolSize = 20;
 
     /** Auto-expand pools when more vehicles are needed */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
@@ -132,8 +133,8 @@ public:
 
     /** Pool expansion increment size */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",
-              meta = (DisplayName = "Pool Expansion Size", DisplayPriority = "4", ClampMin = "1", ClampMax = "50", EditCondition = "bAutoExpandPools"))
-    int32 PoolExpansionSize = 5;
+              meta = (DisplayName = "Pool Expansion Size", DisplayPriority = "4", ClampMin = "1", ClampMax = "100", EditCondition = "bAutoExpandPools"))
+    int32 PoolExpansionSize = 10;
 
     /** Auto-shrink unused pools to save memory */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Bridge|Performance|Pool Management",

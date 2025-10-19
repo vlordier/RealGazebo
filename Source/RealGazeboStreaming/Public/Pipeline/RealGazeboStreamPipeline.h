@@ -147,8 +147,8 @@ private:
 	// Processing Queues
 	// ========================================
 
-	/** Encoded frame queue (Encoding thread → RTSP thread) */
-	/** Note: Hardware encoding uses direct GPU texture → Encoder path (zero-copy) */
+	/** Encoded frame queue (Encoding thread -> RTSP thread) */
+	/** Note: Hardware encoding uses direct GPU texture -> Encoder path (zero-copy) */
 	/** Texture queue is managed by encoding thread per-stream encoder */
 	TRealGazeboStreamQueue<TSharedPtr<FEncodedFrameData>> RTSPQueue;
 

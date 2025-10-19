@@ -11,6 +11,7 @@
 #include "UObject/NoExportTypes.h"
 #include "UDPReceiver.h"
 #include "GazeboBridgeTypes.h"
+#include <atomic>  // C++11 atomic operations for thread-safe statistics
 #include "DataStreamProcessor.generated.h"
 
 // Forward declarations
@@ -89,17 +90,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Bridge|Statistics")
     void ResetStatistics();
 
-    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Statistics")
-    int32 TotalValidPosePackets = 0;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Statistics")
-    int32 TotalValidMotorPackets = 0;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Statistics") 
-    int32 TotalValidServoPackets = 0;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Statistics")
-    int32 TotalInvalidPackets = 0;
+    // Thread-safe statistics counters using std::atomic (NOTE: Cannot be UPROPERTY due to atomic type)
+    // Use GetNetworkStatistics() to read these values from Blueprints
+    std::atomic<int32> TotalValidPosePackets;
+    std::atomic<int32> TotalValidMotorPackets;
+    std::atomic<int32> TotalValidServoPackets;
+    std::atomic<int32> TotalInvalidPackets;
+    std::atomic<int32> TotalDestroyedVehicles;  // Count of vehicles destroyed via 3-byte packets
 
     UPROPERTY(BlueprintReadOnly, Category = "Bridge|Statistics")
     float PacketsPerSecond = 0.0f;
@@ -183,13 +180,13 @@ protected:
     int32 GetExpectedServoPacketSize(uint8 VehicleType) const;
 
     //----------------------------------------------------------
-    // Performance Monitoring
+    // Performance Monitoring (thread-safe counters)
     //----------------------------------------------------------
 
     mutable double LastStatsUpdate = 0.0;
-    mutable int32 PacketCountSinceLastUpdate = 0;
+    mutable std::atomic<int32> PacketCountSinceLastUpdate;  // Thread-safe counter
     mutable float TotalProcessingTime = 0.0f;
-    mutable int32 ProcessedBatches = 0;
+    mutable std::atomic<int32> ProcessedBatches;  // Thread-safe counter
 
     void UpdatePerformanceStatistics() const;
 

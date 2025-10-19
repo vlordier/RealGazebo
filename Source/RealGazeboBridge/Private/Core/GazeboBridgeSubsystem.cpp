@@ -14,13 +14,13 @@
 #include "RealGazeboBridge.h"
 
 UGazeboBridgeSubsystem::UGazeboBridgeSubsystem()
+    : bIsBridgeActive(false)  // Atomic initialization
 {
     ListenPort = 5005;
     ServerIPAddress = TEXT("");
     bAutoSpawnVehicles = true;
     ConfiguredUpdateFrequency = 60.0f;
-    
-    bIsBridgeActive = false;
+
     LastUpdateTime = 0.0f;
     FrameCounter = 0;
     AverageFrameTime = 0.0f;
@@ -170,10 +170,47 @@ void UGazeboBridgeSubsystem::ClearAllVehicles()
     {
         VehiclePool->ReleaseAllActiveVehicles();
     }
-    
+
     VehicleDataMap.Empty();
-    
+
     UE_LOG(LogRealGazeboBridge, Display, TEXT("All vehicles cleared"));
+}
+
+void UGazeboBridgeSubsystem::RemoveVehicle(const FVehicleID& VehicleID)
+{
+    // Find the vehicle in the map
+    if (FVehicleRuntimeData* VehicleData = VehicleDataMap.Find(VehicleID))
+    {
+        // DESTROY the actor completely instead of releasing to pool
+        // This removes it from the World Outliner
+        if (AVehicleBasePawn* Pawn = VehicleData->VisualPawn.Get())
+        {
+            // Notify pool manager to remove tracking
+            if (VehiclePool)
+            {
+                VehiclePool->DestroyVehicleActor(Pawn);
+            }
+
+            // Destroy the actor (removes from World Outliner)
+            Pawn->Destroy();
+
+            UE_LOG(LogRealGazeboBridge, Display, TEXT("Vehicle actor destroyed: Type=%d, Num=%d"),
+                   VehicleID.VehicleType, VehicleID.VehicleNum);
+        }
+
+        VehicleData->VisualPawn.Reset();
+
+        // Remove from the vehicle data map
+        VehicleDataMap.Remove(VehicleID);
+
+        UE_LOG(LogRealGazeboBridge, Display, TEXT("Vehicle removed/destroyed: Type=%d, Num=%d (3-byte destroy packet)"),
+               VehicleID.VehicleType, VehicleID.VehicleNum);
+    }
+    else
+    {
+        UE_LOG(LogRealGazeboBridge, Verbose, TEXT("Vehicle not found for removal: Type=%d, Num=%d"),
+               VehicleID.VehicleType, VehicleID.VehicleNum);
+    }
 }
 
 int32 UGazeboBridgeSubsystem::GetTotalVehicleCount() const

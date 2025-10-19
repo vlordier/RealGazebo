@@ -11,6 +11,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Engine/DataTable.h"
 #include "GazeboBridgeTypes.h"
+#include <atomic>  // C++11 atomic operations for thread-safe state management
 #include "GazeboBridgeSubsystem.generated.h"
 
 // Forward declarations
@@ -77,6 +78,10 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Bridge|Control")
     void ClearAllVehicles();
+
+    /** Remove/despawn a specific vehicle by ID (used when receiving 3-byte destroy packet) */
+    UFUNCTION(BlueprintCallable, Category = "Bridge|Control")
+    void RemoveVehicle(const FVehicleID& VehicleID);
 
     //----------------------------------------------------------
     // Vehicle Management
@@ -215,8 +220,8 @@ protected:
     void OnServoDataReceived(const FBridgeServoData& ServoData);
 
 private:
-    /** Bridge active state */
-    bool bIsBridgeActive = false;
+    /** Bridge active state (thread-safe atomic) */
+    std::atomic<bool> bIsBridgeActive;
 
     /** Cached world reference */
     TWeakObjectPtr<UWorld> CachedWorld;

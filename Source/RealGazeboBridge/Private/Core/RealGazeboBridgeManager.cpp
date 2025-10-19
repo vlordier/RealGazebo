@@ -342,22 +342,22 @@ bool ARealGazeboBridgeManager::IsValidVehicleDataTable(UDataTable* DataTable) co
 
 bool ARealGazeboBridgeManager::ValidatePoolConfiguration() const
 {
-    // Validate pool size limits
-    if (MaxActorsPerType < 10 || MaxActorsPerType > 255)
+    // Validate pool size limits (protocol supports 256 instances per type)
+    if (MaxActorsPerType < 10 || MaxActorsPerType > 256)
     {
-        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid MaxActorsPerType: %d. Should be between 10-255 (UDP protocol limit)"), MaxActorsPerType);
+        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid MaxActorsPerType: %d. Should be between 10-256 (protocol supports 256 instances per type)"), MaxActorsPerType);
         return false;
     }
 
-    if (InitialPoolSize < 5 || InitialPoolSize > 100 || InitialPoolSize > MaxActorsPerType)
+    if (InitialPoolSize < 5 || InitialPoolSize > 256 || InitialPoolSize > MaxActorsPerType)
     {
-        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid InitialPoolSize: %d. Should be between 5-100 and not exceed MaxActorsPerType"), InitialPoolSize);
+        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid InitialPoolSize: %d. Should be between 5-256 and not exceed MaxActorsPerType"), InitialPoolSize);
         return false;
     }
 
-    if (PoolExpansionSize < 1 || PoolExpansionSize > 50)
+    if (PoolExpansionSize < 1 || PoolExpansionSize > 100)
     {
-        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid PoolExpansionSize: %d. Should be between 1-50"), PoolExpansionSize);
+        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid PoolExpansionSize: %d. Should be between 1-100"), PoolExpansionSize);
         return false;
     }
 
@@ -372,10 +372,10 @@ bool ARealGazeboBridgeManager::ValidatePoolConfiguration() const
 
 bool ARealGazeboBridgeManager::ValidateNetworkConfiguration() const
 {
-    // Validate batch processing settings
-    if (BatchSize < 1 || BatchSize > 100)
+    // Validate batch processing settings (increased for higher vehicle capacity)
+    if (BatchSize < 1 || BatchSize > 1000)
     {
-        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid BatchSize: %d. Should be between 1-100"), BatchSize);
+        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid BatchSize: %d. Should be between 1-1000"), BatchSize);
         return false;
     }
 
@@ -390,10 +390,10 @@ bool ARealGazeboBridgeManager::ValidateNetworkConfiguration() const
 
 bool ARealGazeboBridgeManager::ValidatePerformanceConfiguration() const
 {
-    // Validate performance limits
-    if (MaxActiveVehicles < 1 || MaxActiveVehicles > 255)
+    // Validate performance limits (protocol supports 65,536 vehicles = 256 types x 256 instances)
+    if (MaxActiveVehicles < 1 || MaxActiveVehicles > 65536)
     {
-        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid MaxActiveVehicles: %d. Should be between 1-255 (UDP protocol limit)"), MaxActiveVehicles);
+        UE_LOG(LogRealGazeboBridgeManager, Warning, TEXT("Invalid MaxActiveVehicles: %d. Should be between 1-65536 (protocol supports 256 types x 256 instances)"), MaxActiveVehicles);
         return false;
     }
 

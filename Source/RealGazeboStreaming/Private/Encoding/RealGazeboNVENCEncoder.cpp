@@ -142,19 +142,19 @@ bool FRealGazeboNVENCEncoder::Initialize(const FRealGazeboStreamConfig& Config)
 	const ERHIInterfaceType RHIType = RHIGetInterfaceType();
 	if (RHIType == ERHIInterfaceType::Vulkan)
 	{
-		EncoderInputType = EEncoderInputType::CUDA; // Vulkan → CUDA
-		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Using Vulkan → CUDA path"));
+		EncoderInputType = EEncoderInputType::CUDA; // Vulkan -> CUDA
+		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Using Vulkan -> CUDA path"));
 	}
 #if PLATFORM_WINDOWS
 	else if (RHIType == ERHIInterfaceType::D3D11)
 	{
 		EncoderInputType = EEncoderInputType::D3D11; // D3D11 direct
-		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Using D3D11 → CUDA path"));
+		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Using D3D11 -> CUDA path"));
 	}
 	else if (RHIType == ERHIInterfaceType::D3D12)
 	{
-		EncoderInputType = EEncoderInputType::CUDA; // D3D12 → CUDA
-		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Using D3D12 → CUDA path"));
+		EncoderInputType = EEncoderInputType::CUDA; // D3D12 -> CUDA
+		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Using D3D12 -> CUDA path"));
 	}
 #endif
 	else
@@ -246,7 +246,7 @@ bool FRealGazeboNVENCEncoder::EncodeTextureFrame(FTexture2DRHIRef SourceTexture,
 	else if (RHIType == ERHIInterfaceType::D3D11)
 	{
 		// D3D11: Pass texture directly (no CUDA conversion needed for now)
-		// TODO: Implement D3D11 → CUDA path if needed
+		// TODO: Implement D3D11 -> CUDA path if needed
 		ID3D11Texture2D* D3D11Texture = static_cast<ID3D11Texture2D*>(SourceTexture->GetNativeResource());
 		InputFrame->SetTexture(D3D11Texture, [](ID3D11Texture2D* NativeTexture) { /* Released by RHI */ });
 	}

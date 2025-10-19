@@ -9,12 +9,12 @@
 #include "Engine/Engine.h"
 
 UUDPReceiver::UUDPReceiver()
+    : bStopRequested(false)  // Atomic initialization
+    , bIsListening(false)    // Atomic initialization
 {
     ListenSocket = nullptr;
     ReceiverThread = nullptr;
     SocketSubsystem = nullptr;
-    bStopRequested = false;
-    bIsListening = false;
     ListenPort = 0;
     ExpectedIPAddress = TEXT("");
 }

@@ -17,6 +17,15 @@ class AVehicleBasePawn;
 
 //----------------------------------------------------------
 // Vehicle Identification
+//
+// Protocol Design:
+// - VehicleNum:  uint8 (0-255) -> 256 instances per vehicle type
+// - VehicleType: uint8 (0-255) -> 256 different vehicle types
+// - Theoretical Maximum: 256 types x 256 instances = 65,536 unique vehicles
+//
+// Practical Limits:
+// - MaxActiveVehicles: 255 (recommended for performance)
+// - MaxActorsPerType:  256 (pool supports all instances per type)
 //----------------------------------------------------------
 
 USTRUCT(BlueprintType)
@@ -24,11 +33,15 @@ struct REALGAZEBOBRIDGE_API FVehicleID
 {
     GENERATED_BODY()
 
-    UPROPERTY(BlueprintReadWrite, Category = "Bridge|Vehicle ID")
-    uint8 VehicleNum = 0; // 0-255 unique vehicle IDs
+    /** Vehicle instance number (0-255) - Identifies individual vehicle within a type */
+    UPROPERTY(BlueprintReadWrite, Category = "Bridge|Vehicle ID",
+              meta = (ToolTip = "Vehicle instance number (0-255) - Up to 256 vehicles per type"))
+    uint8 VehicleNum = 0;
 
-    UPROPERTY(BlueprintReadWrite, Category = "Bridge|Vehicle ID")
-    uint8 VehicleType = 0; // Vehicle type code (0-255) matching VehicleTypeCode in FBridgeVehicleConfigRow (e.g., 0=Iris, 1=Rover)
+    /** Vehicle type code (0-255) - Maps to VehicleTypeCode in FBridgeVehicleConfigRow DataTable */
+    UPROPERTY(BlueprintReadWrite, Category = "Bridge|Vehicle ID",
+              meta = (ToolTip = "Vehicle type code (0-255) - Supports up to 256 different vehicle types (e.g., X500, Iris, Rover)"))
+    uint8 VehicleType = 0;
 
     FVehicleID() = default;
     FVehicleID(uint8 InVehicleNum, uint8 InVehicleType) 
