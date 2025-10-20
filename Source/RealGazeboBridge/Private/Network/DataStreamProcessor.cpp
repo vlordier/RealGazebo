@@ -195,27 +195,6 @@ void UDataStreamProcessor::ProcessSinglePacket(const FUDPData& PacketData)
         return;
     }
 
-    // **SPECIAL CASE: 3-byte header-only packet = Destroy Vehicle Command**
-    if (PacketData.Data.Num() == PACKET_HEADER_SIZE)
-    {
-        uint8 VehicleNum = PacketData.Data[0];
-        uint8 VehicleType = PacketData.Data[1];
-        // MessageID (byte 2) is ignored for destroy packets
-
-        FVehicleID VehicleID(VehicleNum, VehicleType);
-
-        // Call subsystem to remove/destroy the vehicle
-        if (UGazeboBridgeSubsystem* Subsystem = BridgeSubsystem.Get())
-        {
-            Subsystem->RemoveVehicle(VehicleID);
-            TotalDestroyedVehicles++;  // Increment destroy counter
-            UE_LOG(LogRealGazeboBridge, Display, TEXT("Destroy command received (3-byte packet): Type=%d, Num=%d"),
-                   VehicleType, VehicleNum);
-        }
-
-        return; // Packet processed - vehicle destroyed
-    }
-
     uint8 VehicleNum, VehicleType, MessageID;
     if (!ValidatePacketHeader(PacketData.Data, VehicleNum, VehicleType, MessageID))
     {
@@ -264,6 +243,27 @@ void UDataStreamProcessor::ProcessSinglePacket(const FUDPData& PacketData)
             else
             {
                 TotalInvalidPackets++;
+            }
+            break;
+        }
+        case 4: // Destroy vehicle command
+        {
+            // Safety check: Destroy command should be header-only (3 bytes)
+            if (PacketData.Data.Num() != PACKET_HEADER_SIZE)
+            {
+                TotalInvalidPackets++;
+                break;
+            }
+
+            FVehicleID VehicleID(VehicleNum, VehicleType);
+
+            // Call subsystem to remove/destroy the vehicle
+            if (UGazeboBridgeSubsystem* Subsystem = BridgeSubsystem.Get())
+            {
+                Subsystem->RemoveVehicle(VehicleID);
+                TotalDestroyedVehicles++;
+                UE_LOG(LogRealGazeboBridge, Display, TEXT("Destroy command received (MessageID=4): Type=%d, Num=%d"),
+                       VehicleType, VehicleNum);
             }
             break;
         }

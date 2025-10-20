@@ -203,7 +203,7 @@ void UGazeboBridgeSubsystem::RemoveVehicle(const FVehicleID& VehicleID)
         // Remove from the vehicle data map
         VehicleDataMap.Remove(VehicleID);
 
-        UE_LOG(LogRealGazeboBridge, Display, TEXT("Vehicle removed/destroyed: Type=%d, Num=%d (3-byte destroy packet)"),
+        UE_LOG(LogRealGazeboBridge, Display, TEXT("Vehicle removed/destroyed: Type=%d, Num=%d (MessageID=4 destroy command)"),
                VehicleID.VehicleType, VehicleID.VehicleNum);
     }
     else

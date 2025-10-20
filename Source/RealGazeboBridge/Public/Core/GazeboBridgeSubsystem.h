@@ -79,7 +79,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Bridge|Control")
     void ClearAllVehicles();
 
-    /** Remove/despawn a specific vehicle by ID (used when receiving 3-byte destroy packet) */
+    /** Remove/despawn a specific vehicle by ID (used when receiving MessageID=4 destroy command) */
     UFUNCTION(BlueprintCallable, Category = "Bridge|Control")
     void RemoveVehicle(const FVehicleID& VehicleID);
 
