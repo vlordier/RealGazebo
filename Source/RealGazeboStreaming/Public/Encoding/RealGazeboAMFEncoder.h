@@ -19,7 +19,7 @@
 #endif
 
 #if PLATFORM_WINDOWS
-#include "ID3D12DynamicRHI.h"
+#include "ID3D11DynamicRHI.h"  // D3D11 support for Windows hardware encoding
 #endif
 
 namespace AVEncoder

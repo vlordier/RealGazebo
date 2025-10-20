@@ -14,7 +14,7 @@
 #include "RHIResources.h"
 
 #if PLATFORM_WINDOWS
-#include "ID3D12DynamicRHI.h"
+#include "ID3D11DynamicRHI.h"  // D3D11 support for Windows hardware encoding
 #endif
 
 #if PLATFORM_DESKTOP && !PLATFORM_APPLE
@@ -148,7 +148,7 @@ private:
 	void SetTextureCUDAVulkan(TSharedPtr<AVEncoder::FVideoEncoderInputFrame> InputFrame, FTexture2DRHIRef Texture);
 #endif
 
-#if PLATFORM_WINDOWS
+#if PLATFORM_WINDOWS && 0  // D3D12 disabled - using D3D11 only
 	/**
 	 * Convert D3D12 texture to CUDA array for encoding (Windows)
 	 */

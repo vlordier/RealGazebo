@@ -6,10 +6,27 @@
 
 #include "RTSP/RealGazeboH264Source.h"
 #include "Core/RealGazeboStreamingLogger.h"
+#include "HAL/PlatformTime.h"
 
 // Live555 includes
 #include "FramedSource.hh"
 #include "UsageEnvironment.hh"
+
+#if PLATFORM_WINDOWS
+// Windows doesn't have gettimeofday, use Unreal's cross-platform time
+static void GetCurrentTimeval(struct timeval* tv)
+{
+	double CurrentTime = FPlatformTime::Seconds();
+	tv->tv_sec = static_cast<long>(CurrentTime);
+	tv->tv_usec = static_cast<long>((CurrentTime - tv->tv_sec) * 1000000.0);
+}
+#else
+// Linux has gettimeofday
+static void GetCurrentTimeval(struct timeval* tv)
+{
+	gettimeofday(tv, nullptr);
+}
+#endif
 
 // Static member initialization
 TMap<FStreamKey, FRealGazeboH264Source::FFrameBuffer> FRealGazeboH264Source::StreamFrameBuffers;
@@ -75,7 +92,7 @@ protected:
 		FMemory::Memcpy(fTo, FrameBuffer->Data.GetData(), fFrameSize);
 
 		// Set presentation time (microseconds)
-		gettimeofday(&fPresentationTime, nullptr);
+		GetCurrentTimeval(&fPresentationTime);
 
 		// Mark frame as consumed
 		FrameBuffer->bHasNewFrame = false;

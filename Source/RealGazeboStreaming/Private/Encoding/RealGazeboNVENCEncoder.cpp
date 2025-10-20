@@ -15,7 +15,8 @@
 #endif
 
 #if PLATFORM_WINDOWS
-#include "ID3D12DynamicRHI.h"
+// #include "ID3D12DynamicRHI.h"  // Disabled - using D3D11 only
+#include "ID3D11DynamicRHI.h"
 #include "D3D11State.h"
 #include "D3D11Resources.h"
 #include "Windows/AllowWindowsPlatformTypes.h"
@@ -239,16 +240,18 @@ bool FRealGazeboNVENCEncoder::EncodeTextureFrame(FTexture2DRHIRef SourceTexture,
 	}
 #endif
 #if PLATFORM_WINDOWS
-	if (RHIType == ERHIInterfaceType::D3D12)
-	{
-		SetTextureCUDAD3D12(InputFrame, SourceTexture);
-	}
-	else if (RHIType == ERHIInterfaceType::D3D11)
+	// D3D12 support removed - using D3D11 only
+	if (RHIType == ERHIInterfaceType::D3D11)
 	{
 		// D3D11: Pass texture directly (no CUDA conversion needed for now)
 		// TODO: Implement D3D11 -> CUDA path if needed
 		ID3D11Texture2D* D3D11Texture = static_cast<ID3D11Texture2D*>(SourceTexture->GetNativeResource());
 		InputFrame->SetTexture(D3D11Texture, [](ID3D11Texture2D* NativeTexture) { /* Released by RHI */ });
+	}
+	else
+	{
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Unsupported RHI type on Windows. Only D3D11 is supported."));
+		return false;
 	}
 #endif
 
@@ -632,6 +635,8 @@ void FRealGazeboNVENCEncoder::SetTextureCUDAVulkan(TSharedPtr<AVEncoder::FVideoE
 #endif
 
 #if PLATFORM_WINDOWS
+// D3D12 support disabled - using D3D11 only
+#if 0
 void FRealGazeboNVENCEncoder::SetTextureCUDAD3D12(TSharedPtr<AVEncoder::FVideoEncoderInputFrame> InputFrame, FTexture2DRHIRef Texture)
 {
 	ID3D12Resource* NativeD3D12Resource = GetID3D12DynamicRHI()->RHIGetResource(Texture);
@@ -724,4 +729,5 @@ void FRealGazeboNVENCEncoder::SetTextureCUDAD3D12(TSharedPtr<AVEncoder::FVideoEn
 		FCUDAModule::CUDA().cuCtxPopCurrent(NULL);
 	});
 }
-#endif
+#endif // #if 0 - D3D12 disabled
+#endif // PLATFORM_WINDOWS

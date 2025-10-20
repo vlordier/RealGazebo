@@ -14,7 +14,12 @@
  * glibc to redirect certain function calls (like fcntl) to their 64-bit variants
  * (like fcntl64). Unreal Engine's bundled toolchain doesn't automatically provide
  * these redirections, so we provide them manually here.
+ *
+ * NOTE: This compatibility layer is only needed on Linux platforms.
+ * Windows uses different socket APIs and doesn't require fcntl compatibility.
  */
+
+#if PLATFORM_LINUX
 
 #include <fcntl.h>
 #include <stdarg.h>
@@ -35,3 +40,5 @@ extern "C" int fcntl64(int fd, int cmd, ...)
     // On 64-bit systems, fcntl and fcntl64 are typically the same
     return fcntl(fd, cmd, arg);
 }
+
+#endif // PLATFORM_LINUX

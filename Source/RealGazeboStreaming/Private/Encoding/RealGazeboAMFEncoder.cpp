@@ -14,7 +14,8 @@
 #endif
 
 #if PLATFORM_WINDOWS
-#include "ID3D12DynamicRHI.h"
+// #include "ID3D12DynamicRHI.h"  // Disabled - using D3D11 only
+#include "ID3D11DynamicRHI.h"
 #include "D3D11State.h"
 #include "D3D11Resources.h"
 #endif
@@ -106,17 +107,12 @@ bool FRealGazeboAMFEncoder::Initialize(const FRealGazeboStreamConfig& Config)
 #endif
 	}
 #if PLATFORM_WINDOWS
+	// D3D12 support removed - using D3D11 only
 	else if (RHIType == ERHIInterfaceType::D3D11)
 	{
 		EncoderInput = AVEncoder::FVideoEncoderInput::CreateForD3D11(GDynamicRHI->RHIGetNativeDevice(), false, true);
 		EncoderInputType = EEncoderInputType::D3D11;
 		UE_LOG(LogRealGazeboStreaming, Log, TEXT("AMFEncoder: Using D3D11 direct path"));
-	}
-	else if (RHIType == ERHIInterfaceType::D3D12)
-	{
-		EncoderInput = AVEncoder::FVideoEncoderInput::CreateForD3D12(GDynamicRHI->RHIGetNativeDevice(), false, false);
-		EncoderInputType = EEncoderInputType::D3D12;
-		UE_LOG(LogRealGazeboStreaming, Log, TEXT("AMFEncoder: Using D3D12 direct path"));
 	}
 #endif
 	else
@@ -233,15 +229,16 @@ bool FRealGazeboAMFEncoder::EncodeTextureFrame(FTexture2DRHIRef SourceTexture, T
 	}
 #endif
 #if PLATFORM_WINDOWS
+	// D3D12 support removed - using D3D11 only
 	if (RHIType == ERHIInterfaceType::D3D11)
 	{
 		ID3D11Texture2D* D3D11Texture = static_cast<ID3D11Texture2D*>(SourceTexture->GetNativeResource());
 		InputFrame->SetTexture(D3D11Texture, [](ID3D11Texture2D* NativeTexture) { /* Released by RHI */ });
 	}
-	else if (RHIType == ERHIInterfaceType::D3D12)
+	else
 	{
-		ID3D12Resource* D3D12Texture = static_cast<ID3D12Resource*>(SourceTexture->GetNativeResource());
-		InputFrame->SetTexture(D3D12Texture, [](ID3D12Resource* NativeTexture) { /* Released by RHI */ });
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("AMFEncoder: Unsupported RHI type on Windows. Only D3D11 is supported."));
+		return false;
 	}
 #endif
 
