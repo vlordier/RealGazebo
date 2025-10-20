@@ -178,39 +178,60 @@ void UGazeboBridgeSubsystem::ClearAllVehicles()
 
 void UGazeboBridgeSubsystem::RemoveVehicle(const FVehicleID& VehicleID)
 {
-    // Find the vehicle in the map
-    if (FVehicleRuntimeData* VehicleData = VehicleDataMap.Find(VehicleID))
+    // Collect all vehicles with the same VehicleNum (regardless of Type)
+    TArray<FVehicleID> VehiclesToRemove;
+    for (const auto& Pair : VehicleDataMap)
     {
-        // DESTROY the actor completely instead of releasing to pool
-        // This removes it from the World Outliner
-        if (AVehicleBasePawn* Pawn = VehicleData->VisualPawn.Get())
+        if (Pair.Key.VehicleNum == VehicleID.VehicleNum)
         {
-            // Notify pool manager to remove tracking
-            if (VehiclePool)
+            VehiclesToRemove.Add(Pair.Key);
+        }
+    }
+
+    // If no vehicles found, log and return
+    if (VehiclesToRemove.Num() == 0)
+    {
+        UE_LOG(LogRealGazeboBridge, Warning, TEXT("No vehicles found with Num=%d for removal"),
+               VehicleID.VehicleNum);
+        return;
+    }
+
+    // Destroy all vehicles with the same VehicleNum
+    int32 DestroyedCount = 0;
+    for (const FVehicleID& IDToRemove : VehiclesToRemove)
+    {
+        if (FVehicleRuntimeData* VehicleData = VehicleDataMap.Find(IDToRemove))
+        {
+            // DESTROY the actor completely instead of releasing to pool
+            // This removes it from the World Outliner
+            if (AVehicleBasePawn* Pawn = VehicleData->VisualPawn.Get())
             {
-                VehiclePool->DestroyVehicleActor(Pawn);
+                // Notify pool manager to remove tracking
+                if (VehiclePool)
+                {
+                    VehiclePool->DestroyVehicleActor(Pawn);
+                }
+
+                // Destroy the actor (removes from World Outliner)
+                Pawn->Destroy();
+
+                UE_LOG(LogRealGazeboBridge, Display, TEXT("Vehicle actor destroyed: Type=%d, Num=%d"),
+                       IDToRemove.VehicleType, IDToRemove.VehicleNum);
             }
 
-            // Destroy the actor (removes from World Outliner)
-            Pawn->Destroy();
+            VehicleData->VisualPawn.Reset();
 
-            UE_LOG(LogRealGazeboBridge, Display, TEXT("Vehicle actor destroyed: Type=%d, Num=%d"),
-                   VehicleID.VehicleType, VehicleID.VehicleNum);
+            // Remove from the vehicle data map
+            VehicleDataMap.Remove(IDToRemove);
+            DestroyedCount++;
+
+            UE_LOG(LogRealGazeboBridge, Display, TEXT("Vehicle removed/destroyed: Type=%d, Num=%d"),
+                   IDToRemove.VehicleType, IDToRemove.VehicleNum);
         }
-
-        VehicleData->VisualPawn.Reset();
-
-        // Remove from the vehicle data map
-        VehicleDataMap.Remove(VehicleID);
-
-        UE_LOG(LogRealGazeboBridge, Display, TEXT("Vehicle removed/destroyed: Type=%d, Num=%d (MessageID=4 destroy command)"),
-               VehicleID.VehicleType, VehicleID.VehicleNum);
     }
-    else
-    {
-        UE_LOG(LogRealGazeboBridge, Verbose, TEXT("Vehicle not found for removal: Type=%d, Num=%d"),
-               VehicleID.VehicleType, VehicleID.VehicleNum);
-    }
+
+    UE_LOG(LogRealGazeboBridge, Display, TEXT("Destroy command (MessageID=4) completed: Num=%d, Destroyed %d vehicle(s)"),
+           VehicleID.VehicleNum, DestroyedCount);
 }
 
 int32 UGazeboBridgeSubsystem::GetTotalVehicleCount() const
