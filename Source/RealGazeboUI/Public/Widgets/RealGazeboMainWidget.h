@@ -21,6 +21,16 @@ class UGazeboBridgeSubsystem;
 class ARealGazeboViewerDirector;
 
 /**
+ * Vehicle sorting mode for UI list
+ */
+UENUM(BlueprintType)
+enum class EVehicleSortMode : uint8
+{
+    ByVehicleNum UMETA(DisplayName = "By Vehicle Number"),
+    ByVehicleType UMETA(DisplayName = "By Vehicle Type")
+};
+
+/**
  * Main RealGazebo monitoring widget with vehicle ListView
  *
  * Features:
@@ -59,6 +69,14 @@ protected:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<class UButton> Reset_Button;
 
+    /** Sort button - toggles vehicle list sorting mode */
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<class UButton> Sort_Button;
+
+    /** Sort button text - displays current sort mode */
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UTextBlock> Sort_ButtonText;
+
     /** Fade overlay border for screen transitions */
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<class UBorder> Fade;
@@ -79,6 +97,10 @@ public:
     /** Duration of fade animation in seconds */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reset")
     float FadeDuration = 1.0f;
+
+    /** Current vehicle sorting mode */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Configuration")
+    EVehicleSortMode CurrentSortMode = EVehicleSortMode::ByVehicleNum;
 
 
     //----------------------------------------------------------
@@ -136,6 +158,18 @@ public:
     /** Set the ViewerDirector reference for camera integration (called by manager) */
     UFUNCTION(BlueprintCallable, Category = "Vehicle List|Manager")
     void SetViewerDirector(ARealGazeboViewerDirector* InViewerDirector);
+
+    //----------------------------------------------------------
+    // Sorting
+    //----------------------------------------------------------
+
+    /** Toggle vehicle list sorting mode and refresh list */
+    UFUNCTION(BlueprintCallable, Category = "Vehicle List|Sorting")
+    void ToggleSortMode();
+
+    /** Sort vehicles according to current sort mode */
+    UFUNCTION(BlueprintCallable, Category = "Vehicle List|Sorting")
+    void SortVehicleList();
 
     //----------------------------------------------------------
     // Events (Blueprint Implementable)
@@ -224,6 +258,9 @@ protected:
     /** Check if vehicle should be shown in UI based on Blueprint hierarchy */
     bool ShouldShowVehicleInUI(uint8 VehicleType) const;
 
+    /** Update sort button text based on current sort mode */
+    void UpdateSortButtonText();
+
 
     //----------------------------------------------------------
     // ListView Event Handlers
@@ -243,6 +280,10 @@ protected:
     /** Reset button click handler */
     UFUNCTION()
     void OnResetButtonClicked();
+
+    /** Sort button click handler */
+    UFUNCTION()
+    void OnSortButtonClicked();
 
     /** Update fade alpha each frame */
     void UpdateFadeAlpha();

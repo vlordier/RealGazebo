@@ -87,6 +87,23 @@ void URealGazeboMainWidget::NativeConstruct()
         UE_LOG(LogRealGazeboUI, Warning, TEXT("Reset_Button not found! Make sure it's bound in the Blueprint."));
     }
 
+    // Bind sort button
+    if (Sort_Button)
+    {
+        Sort_Button->OnClicked.AddDynamic(this, &URealGazeboMainWidget::OnSortButtonClicked);
+    }
+    else
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("Sort_Button not found! Make sure it's bound in the Blueprint."));
+    }
+
+    // Initialize sort button text
+    if (!Sort_ButtonText)
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("Sort_ButtonText not found! Make sure it's bound in the Blueprint."));
+    }
+    UpdateSortButtonText();
+
     // Start regular update timer
     if (UWorld* World = GetWorld())
     {
@@ -153,10 +170,32 @@ void URealGazeboMainWidget::UpdateVehicleData()
     }
     
     double StartTime = FPlatformTime::Seconds();
-    
+
     // Get current vehicle IDs from subsystem
     TArray<FVehicleID> CurrentVehicleIDs = BridgeSubsystem->GetAllVehicleIDs();
-    
+
+    // Sort based on current sort mode
+    if (CurrentSortMode == EVehicleSortMode::ByVehicleNum)
+    {
+        // Sort by VehicleNum only
+        CurrentVehicleIDs.Sort([](const FVehicleID& A, const FVehicleID& B)
+        {
+            return A.VehicleNum < B.VehicleNum;
+        });
+    }
+    else // EVehicleSortMode::ByVehicleType
+    {
+        // Sort by VehicleType first, then by VehicleNum
+        CurrentVehicleIDs.Sort([](const FVehicleID& A, const FVehicleID& B)
+        {
+            if (A.VehicleType != B.VehicleType)
+            {
+                return A.VehicleType < B.VehicleType;
+            }
+            return A.VehicleNum < B.VehicleNum;
+        });
+    }
+
     // Track changes for performance
     bool bVehicleListChanged = false;
     
@@ -675,5 +714,95 @@ void URealGazeboMainWidget::ReloadCurrentLevel()
 
     // Note: After reload, NativeConstruct will be called again
     // and Fade border will be reset to alpha 0 (transparent)
+}
+
+//----------------------------------------------------------
+// Sorting Functionality
+//----------------------------------------------------------
+
+void URealGazeboMainWidget::OnSortButtonClicked()
+{
+    ToggleSortMode();
+}
+
+void URealGazeboMainWidget::ToggleSortMode()
+{
+    // Toggle between sort modes
+    if (CurrentSortMode == EVehicleSortMode::ByVehicleNum)
+    {
+        CurrentSortMode = EVehicleSortMode::ByVehicleType;
+        UE_LOG(LogRealGazeboUI, Log, TEXT("Sort mode changed to: By Vehicle Type"));
+    }
+    else
+    {
+        CurrentSortMode = EVehicleSortMode::ByVehicleNum;
+        UE_LOG(LogRealGazeboUI, Log, TEXT("Sort mode changed to: By Vehicle Number"));
+    }
+
+    // Update button text
+    UpdateSortButtonText();
+
+    // Re-sort the vehicle list immediately
+    SortVehicleList();
+}
+
+void URealGazeboMainWidget::UpdateSortButtonText()
+{
+    if (!Sort_ButtonText)
+    {
+        return;
+    }
+
+    FText ButtonText;
+    if (CurrentSortMode == EVehicleSortMode::ByVehicleNum)
+    {
+        ButtonText = FText::FromString(TEXT("SortBy: ID"));
+    }
+    else // EVehicleSortMode::ByVehicleType
+    {
+        ButtonText = FText::FromString(TEXT("SortBy: Vehicle"));
+    }
+
+    Sort_ButtonText->SetText(ButtonText);
+}
+
+void URealGazeboMainWidget::SortVehicleList()
+{
+    if (!VehicleListView)
+    {
+        return;
+    }
+
+    // Clear and re-add all items in sorted order
+    TArray<URealGazeboVehicleListItem*> AllItems = GetAllVehicleItems();
+
+    // Sort items based on current mode
+    if (CurrentSortMode == EVehicleSortMode::ByVehicleNum)
+    {
+        AllItems.Sort([](const URealGazeboVehicleListItem& A, const URealGazeboVehicleListItem& B)
+        {
+            return A.VehicleID.VehicleNum < B.VehicleID.VehicleNum;
+        });
+    }
+    else // EVehicleSortMode::ByVehicleType
+    {
+        AllItems.Sort([](const URealGazeboVehicleListItem& A, const URealGazeboVehicleListItem& B)
+        {
+            if (A.VehicleID.VehicleType != B.VehicleID.VehicleType)
+            {
+                return A.VehicleID.VehicleType < B.VehicleID.VehicleType;
+            }
+            return A.VehicleID.VehicleNum < B.VehicleID.VehicleNum;
+        });
+    }
+
+    // Clear ListView and re-add in sorted order
+    VehicleListView->ClearListItems();
+    for (URealGazeboVehicleListItem* Item : AllItems)
+    {
+        VehicleListView->AddItem(Item);
+    }
+
+    UE_LOG(LogRealGazeboUI, Log, TEXT("Vehicle list re-sorted with %d items"), AllItems.Num());
 }
 
