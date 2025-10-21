@@ -167,6 +167,9 @@ protected:
     /** Map of vehicle IDs to list items for fast lookup */
     TMap<FVehicleID, TObjectPtr<URealGazeboVehicleListItem>> VehicleItemMap;
 
+    /** Set of vehicle IDs that are skipped from UI (ParentClass == NativeParentClass) */
+    TSet<FVehicleID> SkippedVehicleIDs;
+
     /** Timer handle for regular updates */
     FTimerHandle UpdateTimerHandle;
 
@@ -217,6 +220,9 @@ protected:
 
     /** Find vehicle pawn by ID for camera integration */
     class AVehicleBasePawn* FindVehiclePawnByID(const FVehicleID& VehicleID) const;
+
+    /** Check if vehicle should be shown in UI based on Blueprint hierarchy */
+    bool ShouldShowVehicleInUI(uint8 VehicleType) const;
 
 
     //----------------------------------------------------------

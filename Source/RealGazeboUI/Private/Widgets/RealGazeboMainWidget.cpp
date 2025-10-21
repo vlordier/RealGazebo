@@ -17,6 +17,7 @@
 #include "ViewerController/RealGazeboViewerDirector.h"
 #include "Vehicles/VehicleBasePawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/BlueprintGeneratedClass.h"
 
 URealGazeboMainWidget::URealGazeboMainWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -163,7 +164,13 @@ void URealGazeboMainWidget::UpdateVehicleData()
     for (const FVehicleID& VehicleID : CurrentVehicleIDs)
     {
         FVehicleRuntimeData RuntimeData = BridgeSubsystem->GetVehicleData(VehicleID);
-        
+
+        // Skip if this vehicle is already marked as not shown in UI
+        if (SkippedVehicleIDs.Contains(VehicleID))
+        {
+            continue;
+        }
+
         if (VehicleItemMap.Contains(VehicleID))
         {
             // Update existing vehicle
@@ -171,9 +178,17 @@ void URealGazeboMainWidget::UpdateVehicleData()
         }
         else
         {
-            // Add new vehicle
-            AddVehicleToList(VehicleID, RuntimeData);
-            bVehicleListChanged = true;
+            // Add new vehicle (or mark as skipped if not shown in UI)
+            URealGazeboVehicleListItem* NewItem = AddVehicleToList(VehicleID, RuntimeData);
+            if (NewItem)
+            {
+                bVehicleListChanged = true;
+            }
+            else
+            {
+                // Vehicle was not added to UI - mark as skipped to avoid checking again
+                SkippedVehicleIDs.Add(VehicleID);
+            }
         }
     }
     
@@ -187,10 +202,25 @@ void URealGazeboMainWidget::UpdateVehicleData()
             bVehicleListChanged = true;
         }
     }
-    
+
     for (const FVehicleID& VehicleID : VehiclesToRemove)
     {
         RemoveVehicleFromList(VehicleID);
+    }
+
+    // Also remove skipped vehicles that no longer exist
+    TArray<FVehicleID> SkippedVehiclesToRemove;
+    for (const FVehicleID& SkippedID : SkippedVehicleIDs)
+    {
+        if (!CurrentVehicleIDs.Contains(SkippedID))
+        {
+            SkippedVehiclesToRemove.Add(SkippedID);
+        }
+    }
+
+    for (const FVehicleID& VehicleID : SkippedVehiclesToRemove)
+    {
+        SkippedVehicleIDs.Remove(VehicleID);
     }
     
     // Update connection status
@@ -222,6 +252,14 @@ void URealGazeboMainWidget::UpdateVehicleData()
 
 URealGazeboVehicleListItem* URealGazeboMainWidget::AddVehicleToList(const FVehicleID& VehicleID, const FVehicleRuntimeData& RuntimeData)
 {
+    // Check if this vehicle type should be shown in UI
+    if (!ShouldShowVehicleInUI(RuntimeData.VehicleType))
+    {
+        UE_LOG(LogRealGazeboUI, Log, TEXT("Vehicle %s skipped - not shown in UI (ParentClass == NativeParentClass)"),
+               *VehicleID.ToString());
+        return nullptr;
+    }
+
     // Create new list item
     URealGazeboVehicleListItem* NewItem = NewObject<URealGazeboVehicleListItem>(this);
     if (!NewItem)
@@ -229,22 +267,22 @@ URealGazeboVehicleListItem* URealGazeboMainWidget::AddVehicleToList(const FVehic
         UE_LOG(LogRealGazeboUI, Error, TEXT("Failed to create vehicle list item for vehicle %s"), *VehicleID.ToString());
         return nullptr;
     }
-    
+
     // Initialize item data
     NewItem->VehicleID = VehicleID;
     NewItem->VehicleTypeName = GetVehicleTypeName(RuntimeData.VehicleType);
     NewItem->VehicleName = GenerateVehicleDisplayName(VehicleID, RuntimeData.VehicleType);
     NewItem->UpdateFromRuntimeData(RuntimeData);
-    
+
     // Add to map and ListView
     VehicleItemMap.Add(VehicleID, NewItem);
-    
+
     if (VehicleListView)
     {
         VehicleListView->AddItem(NewItem);
     }
-    
-    // Added vehicle to list
+
+    UE_LOG(LogRealGazeboUI, Log, TEXT("Vehicle %s added to UI list"), *VehicleID.ToString());
     return NewItem;
 }
 
@@ -303,6 +341,58 @@ FString URealGazeboMainWidget::GenerateVehicleDisplayName(const FVehicleID& Vehi
 {
     FString TypeName = GetVehicleTypeName(VehicleType);
     return FString::Printf(TEXT("%s_%d"), *TypeName, VehicleID.VehicleNum);
+}
+
+bool URealGazeboMainWidget::ShouldShowVehicleInUI(uint8 VehicleType) const
+{
+    if (!BridgeSubsystem.IsValid())
+    {
+        return false;
+    }
+
+    // Get vehicle configuration from DataTable
+    FBridgeVehicleConfigRow Config;
+    if (!BridgeSubsystem->GetVehicleConfig(VehicleType, Config))
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("Vehicle type %d not found in config table"), VehicleType);
+        return false;
+    }
+
+    // Check if VehiclePawnClass is valid
+    if (!Config.VehiclePawnClass)
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("Vehicle type %d has no VehiclePawnClass assigned"), VehicleType);
+        return false;
+    }
+
+    // Get the vehicle class
+    UClass* VehicleClass = Config.VehiclePawnClass;
+
+    // Check if this is a Blueprint class
+    UBlueprintGeneratedClass* BlueprintClass = Cast<UBlueprintGeneratedClass>(VehicleClass);
+    if (!BlueprintClass)
+    {
+        // Not a Blueprint, it's a native C++ class - don't show
+        UE_LOG(LogRealGazeboUI, Log, TEXT("Vehicle Type %d (%s): Native C++ class - NOT shown in UI"),
+               VehicleType, *Config.VehicleName);
+        return false;
+    }
+
+    // It's a Blueprint - check if parent is also a Blueprint
+    UClass* ParentClass = VehicleClass->GetSuperClass();
+    if (!ParentClass)
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("Vehicle Type %d (%s): No parent class - NOT shown in UI"),
+               VehicleType, *Config.VehicleName);
+        return false;
+    }
+
+    UBlueprintGeneratedClass* ParentBlueprintClass = Cast<UBlueprintGeneratedClass>(ParentClass);
+
+    // Show in UI only if:
+    // - VehicleClass is a Blueprint (already checked)
+    // - ParentClass is also a Blueprint (not a native C++ class)
+    return (ParentBlueprintClass != nullptr);
 }
 
 void URealGazeboMainWidget::OnVehicleItemSelectionChanged(UObject* SelectedItem)
@@ -383,8 +473,9 @@ void URealGazeboMainWidget::ClearAllVehicles()
     {
         VehicleListView->ClearListItems();
     }
-    
+
     VehicleItemMap.Empty();
+    SkippedVehicleIDs.Empty();
     // Cleared all vehicles from list
 }
 
