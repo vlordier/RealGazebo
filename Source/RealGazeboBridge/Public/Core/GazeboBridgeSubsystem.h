@@ -102,6 +102,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Bridge|Vehicles")
     TArray<FVehicleID> GetAllVehicleIDs() const;
 
+    /** Find all vehicles with a specific VehicleNum (regardless of VehicleType)
+     * Useful for: debugging, collision detection, UI display, cleanup operations
+     * Example: FindVehiclesByNum(0) returns all vehicles with Num=0 (different Types can coexist)
+     */
+    UFUNCTION(BlueprintCallable, Category = "Bridge|Vehicles")
+    TArray<FVehicleID> FindVehiclesByNum(uint8 VehicleNum) const;
+
     UFUNCTION(BlueprintCallable, Category = "Bridge|Configuration")
     bool GetVehicleConfig(uint8 VehicleType, FBridgeVehicleConfigRow& OutConfig) const;
 

@@ -178,15 +178,8 @@ void UGazeboBridgeSubsystem::ClearAllVehicles()
 
 void UGazeboBridgeSubsystem::RemoveVehicle(const FVehicleID& VehicleID)
 {
-    // Collect all vehicles with the same VehicleNum (regardless of Type)
-    TArray<FVehicleID> VehiclesToRemove;
-    for (const auto& Pair : VehicleDataMap)
-    {
-        if (Pair.Key.VehicleNum == VehicleID.VehicleNum)
-        {
-            VehiclesToRemove.Add(Pair.Key);
-        }
-    }
+    // Find all vehicles with the same VehicleNum using helper function
+    TArray<FVehicleID> VehiclesToRemove = FindVehiclesByNum(VehicleID.VehicleNum);
 
     // If no vehicles found, log and return
     if (VehiclesToRemove.Num() == 0)
@@ -273,6 +266,21 @@ TArray<FVehicleID> UGazeboBridgeSubsystem::GetAllVehicleIDs() const
     TArray<FVehicleID> VehicleIDs;
     VehicleDataMap.GetKeys(VehicleIDs);
     return VehicleIDs;
+}
+
+TArray<FVehicleID> UGazeboBridgeSubsystem::FindVehiclesByNum(uint8 VehicleNum) const
+{
+    TArray<FVehicleID> FoundVehicles;
+
+    for (const auto& Pair : VehicleDataMap)
+    {
+        if (Pair.Key.VehicleNum == VehicleNum)
+        {
+            FoundVehicles.Add(Pair.Key);
+        }
+    }
+
+    return FoundVehicles;
 }
 
 bool UGazeboBridgeSubsystem::GetVehicleConfig(uint8 VehicleType, FBridgeVehicleConfigRow& OutConfig) const
