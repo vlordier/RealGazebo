@@ -25,7 +25,7 @@ public:
 
 	//~ Begin UDeveloperSettings Interface
 	virtual FName GetCategoryName() const override;
-	virtual FText GetSectionText() const override;
+	virtual FName GetSectionName() const override;
 	//~ End UDeveloperSettings Interface
 
 	/** Get settings singleton */

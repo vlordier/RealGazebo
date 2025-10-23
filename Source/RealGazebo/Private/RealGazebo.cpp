@@ -106,7 +106,17 @@ void FRealGazeboModule::ShutdownSubModules()
 {
     UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Main Module: Coordinating sub-modules shutdown"));
 
+    // CRITICAL FIX: Don't manually unload modules during engine shutdown
+    // This prevents crash in Blueprint type promotion table refresh (EXCEPTION_ACCESS_VIOLATION)
+    // During editor shutdown, engine automatically unloads modules in correct order
+    if (IsEngineExitRequested())
+    {
+        UE_LOG(LogRealGazebo, Log, TEXT("RealGazebo Main Module: Engine shutdown detected - skipping manual module unload"));
+        return;
+    }
+
     // Shutdown in reverse order (UI -> Streaming -> Bridge)
+    // Only when NOT in engine shutdown (e.g., during hot reload or plugin unload)
 
     // Shutdown UI module first
     if (FModuleManager::Get().IsModuleLoaded(TEXT("RealGazeboUI")))

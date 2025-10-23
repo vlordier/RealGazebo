@@ -17,9 +17,9 @@ FName URealGazeboStreamingSettings::GetCategoryName() const
 	return FName(TEXT("Plugins"));
 }
 
-FText URealGazeboStreamingSettings::GetSectionText() const
+FName URealGazeboStreamingSettings::GetSectionName() const
 {
-	return FText::FromString(TEXT("RealGazebo Streaming"));
+	return FName(TEXT("RealGazebo Streaming"));
 }
 
 const URealGazeboStreamingSettings* URealGazeboStreamingSettings::Get()
