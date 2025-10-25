@@ -22,6 +22,30 @@ ARealGazeboViewerDirector::ARealGazeboViewerDirector()
     CurrentMode = ERealGazeboViewerMode::Manual; // Default to manual but don't use original pawn yet
     CurrentVehicle = nullptr;
     OriginalPawn = nullptr;
+
+    // Initialize default camera presets
+    CameraPresets.Empty();
+
+    // Preset 0 - VILS (Keyboard: 1)
+    FCameraPreset VILSPreset;
+    VILSPreset.PresetName = TEXT("VILS");
+    VILSPreset.Location = FVector(-3372.325356f, 1064.508698f, 10919.941478f);
+    VILSPreset.Rotation = FRotator(-89.900002f, -91.111628f, -0.000000f);
+    CameraPresets.Add(VILSPreset);
+
+    // Preset 1 - Urban (Keyboard: 2)
+    FCameraPreset UrbanPreset;
+    UrbanPreset.PresetName = TEXT("Urban");
+    UrbanPreset.Location = FVector(-31214.548424f, -16235.116186f, 18249.156533f);
+    UrbanPreset.Rotation = FRotator(-89.900002f, 172.132914f, -0.000000f);
+    CameraPresets.Add(UrbanPreset);
+
+    // Preset 2 - C-Track (Keyboard: 3)
+    FCameraPreset CTrackPreset;
+    CTrackPreset.PresetName = TEXT("C-Track");
+    CTrackPreset.Location = FVector(-59082.572512f, 4478.376668f, 23009.524176f);
+    CTrackPreset.Rotation = FRotator(-32.180821f, -0.412282f, -0.000000f);
+    CameraPresets.Add(CTrackPreset);
 }
 
 void ARealGazeboViewerDirector::BeginPlay()
@@ -84,6 +108,11 @@ void ARealGazeboViewerDirector::SetupInputBindings()
     URealGazeboBlueprintLib::BindActionToKey(TEXT("RealGazebo_ManualCamera"), EKeys::M, this, &ARealGazeboViewerDirector::InputManualCamera);
     URealGazeboBlueprintLib::BindActionToKey(TEXT("RealGazebo_FirstPersonCamera"), EKeys::F, this, &ARealGazeboViewerDirector::InputFirstPersonCamera);
     URealGazeboBlueprintLib::BindActionToKey(TEXT("RealGazebo_ThirdPersonCamera"), EKeys::B, this, &ARealGazeboViewerDirector::InputThirdPersonCamera);
+
+    // Bind camera preset keys (1, 2, 3)
+    URealGazeboBlueprintLib::BindActionToKey(TEXT("RealGazebo_CameraPreset1"), EKeys::One, this, &ARealGazeboViewerDirector::InputPreset1);
+    URealGazeboBlueprintLib::BindActionToKey(TEXT("RealGazebo_CameraPreset2"), EKeys::Two, this, &ARealGazeboViewerDirector::InputPreset2);
+    URealGazeboBlueprintLib::BindActionToKey(TEXT("RealGazebo_CameraPreset3"), EKeys::Three, this, &ARealGazeboViewerDirector::InputPreset3);
 
     UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Input bindings setup complete"));
 }
@@ -390,6 +419,89 @@ FTransform ARealGazeboViewerDirector::GetCurrentCameraTransform() const
 }
 
 //----------------------------------------------------------
+// Camera Preset Control
+//----------------------------------------------------------
+
+void ARealGazeboViewerDirector::ApplyCameraPreset(int32 PresetIndex)
+{
+    // Validate preset index
+    if (!CameraPresets.IsValidIndex(PresetIndex))
+    {
+        UE_LOG(LogRealGazeboUI, Warning, TEXT("ViewerDirector: Invalid preset index: %d (Available: %d)"),
+               PresetIndex, CameraPresets.Num());
+        return;
+    }
+
+    const FCameraPreset& Preset = CameraPresets[PresetIndex];
+
+    // Must be in Manual mode to apply presets
+    if (CurrentMode != ERealGazeboViewerMode::Manual)
+    {
+        UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Switching to Manual mode to apply preset '%s'"),
+               *Preset.PresetName);
+        SetCameraMode(ERealGazeboViewerMode::Manual);
+    }
+
+    // Apply preset to OriginalPawn (DefaultPawn used for manual camera)
+    if (OriginalPawn)
+    {
+        OriginalPawn->SetActorLocation(Preset.Location);
+        OriginalPawn->SetActorRotation(Preset.Rotation);
+
+        // Update PlayerController's control rotation for smooth camera view
+        APlayerController* PC = GetWorld()->GetFirstPlayerController();
+        if (PC)
+        {
+            PC->SetControlRotation(Preset.Rotation);
+        }
+
+        UE_LOG(LogRealGazeboUI, Display, TEXT("ViewerDirector: Applied camera preset '%s' - Location: %s, Rotation: %s"),
+               *Preset.PresetName, *Preset.Location.ToString(), *Preset.Rotation.ToString());
+    }
+    else
+    {
+        UE_LOG(LogRealGazeboUI, Error, TEXT("ViewerDirector: Cannot apply preset - OriginalPawn not available"));
+    }
+}
+
+bool ARealGazeboViewerDirector::ApplyCameraPresetByName(const FString& PresetName)
+{
+    for (int32 i = 0; i < CameraPresets.Num(); ++i)
+    {
+        if (CameraPresets[i].PresetName.Equals(PresetName, ESearchCase::IgnoreCase))
+        {
+            ApplyCameraPreset(i);
+            return true;
+        }
+    }
+
+    UE_LOG(LogRealGazeboUI, Warning, TEXT("ViewerDirector: Camera preset '%s' not found"), *PresetName);
+    return false;
+}
+
+void ARealGazeboViewerDirector::AddCameraPreset(const FCameraPreset& NewPreset)
+{
+    CameraPresets.Add(NewPreset);
+    UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Added camera preset '%s'"), *NewPreset.PresetName);
+}
+
+void ARealGazeboViewerDirector::RemoveCameraPreset(int32 PresetIndex)
+{
+    if (CameraPresets.IsValidIndex(PresetIndex))
+    {
+        FString PresetName = CameraPresets[PresetIndex].PresetName;
+        CameraPresets.RemoveAt(PresetIndex);
+        UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Removed camera preset '%s'"), *PresetName);
+    }
+}
+
+void ARealGazeboViewerDirector::SetCameraPresets(const TArray<FCameraPreset>& NewPresets)
+{
+    CameraPresets = NewPresets;
+    UE_LOG(LogRealGazeboUI, Log, TEXT("ViewerDirector: Set %d camera presets"), CameraPresets.Num());
+}
+
+//----------------------------------------------------------
 // Input Handlers
 //----------------------------------------------------------
 
@@ -406,4 +518,19 @@ void ARealGazeboViewerDirector::InputFirstPersonCamera()
 void ARealGazeboViewerDirector::InputThirdPersonCamera()
 {
     SetCameraMode(ERealGazeboViewerMode::ThirdPerson);
+}
+
+void ARealGazeboViewerDirector::InputPreset1()
+{
+    ApplyCameraPreset(0); // VILS
+}
+
+void ARealGazeboViewerDirector::InputPreset2()
+{
+    ApplyCameraPreset(1); // Urban
+}
+
+void ARealGazeboViewerDirector::InputPreset3()
+{
+    ApplyCameraPreset(2); // C-Track
 }

@@ -76,6 +76,34 @@ public:
     void RefreshVehicleList();
 
     //----------------------------------------------------------
+    // Camera Preset Control
+    //----------------------------------------------------------
+
+    /** Apply a camera preset by index (teleports manual camera) */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Viewer")
+    void ApplyCameraPreset(int32 PresetIndex);
+
+    /** Apply a camera preset by name (teleports manual camera) */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Viewer")
+    bool ApplyCameraPresetByName(const FString& PresetName);
+
+    /** Get all available camera presets */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Viewer")
+    TArray<FCameraPreset> GetCameraPresets() const { return CameraPresets; }
+
+    /** Add a camera preset at runtime */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Viewer")
+    void AddCameraPreset(const FCameraPreset& NewPreset);
+
+    /** Remove a camera preset by index */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Viewer")
+    void RemoveCameraPreset(int32 PresetIndex);
+
+    /** Set all camera presets (used during initialization) */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Viewer")
+    void SetCameraPresets(const TArray<FCameraPreset>& NewPresets);
+
+    //----------------------------------------------------------
     // Manual Camera Control
     //----------------------------------------------------------
 
@@ -97,6 +125,15 @@ private:
     /** Input handler for third person camera mode (B key) */
     void InputThirdPersonCamera();
 
+    /** Input handler for camera preset 1 (1 key - VILS) */
+    void InputPreset1();
+
+    /** Input handler for camera preset 2 (2 key - Urban) */
+    void InputPreset2();
+
+    /** Input handler for camera preset 3 (3 key - C-Track) */
+    void InputPreset3();
+
     //----------------------------------------------------------
     // Configuration
     //----------------------------------------------------------
@@ -110,6 +147,10 @@ protected:
     /** Initial rotation for manual camera pawn */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Camera Settings")
     FRotator InitialCameraRotation = FRotator(-20.0f, 0.0f, 0.0f);
+
+    /** Camera presets for quick teleportation in Manual mode */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Camera Presets")
+    TArray<FCameraPreset> CameraPresets;
 
     //----------------------------------------------------------
     // Internal State

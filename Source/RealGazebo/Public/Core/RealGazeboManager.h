@@ -11,6 +11,7 @@
 #include "Engine/DataTable.h"
 #include "GazeboBridgeTypes.h"
 #include "Data/RealGazeboVehicleData.h"
+#include "ViewerController/RealGazeboViewerTypes.h"
 #include "RealGazeboManager.generated.h"
 
 // Forward declarations
@@ -186,6 +187,12 @@ public:
               meta = (DisplayName = "Initial Camera Rotation", DisplayPriority = "2",
                      ToolTip = "Starting rotation for DefaultPawn camera"))
     FRotator InitialCameraRotation = FRotator(-20.0f, 0.0f, 0.0f);
+
+    /** Predefined camera locations for quick teleportation in Manual mode */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|UI Camera|Camera Presets",
+              meta = (DisplayName = "Camera Presets", DisplayPriority = "1",
+                     ToolTip = "List of predefined camera locations for quick navigation"))
+    TArray<FCameraPreset> CameraPresets;
 
     /** Z-order for the widget when added to viewport */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|UI Camera|UI Settings",

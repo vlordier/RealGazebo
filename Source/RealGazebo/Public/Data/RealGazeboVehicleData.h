@@ -46,6 +46,12 @@ struct REALGAZEBO_API FRealGazeboVehicleConfigRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vehicle Config", meta = (DisplayName = "Vehicle Image"))
 	TSoftObjectPtr<UTexture2D> VehicleImage;
 
+	/** Controls whether this object appears in the UI vehicle list */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vehicle Config",
+	          meta = (DisplayName = "Show In UI",
+	                  ToolTip = "If false, this object will not appear in the UI vehicle list (useful for persons, props, etc.)"))
+	bool bShowInUI = true; // Default true for backward compatibility with existing vehicles
+
 	/** Calculate expected packet size for motor speed messages */
 	int32 GetMotorSpeedPacketSize() const
 	{
@@ -67,6 +73,7 @@ struct REALGAZEBO_API FRealGazeboVehicleConfigRow : public FTableRowBase
 		BridgeRow.MotorCount = MotorCount;
 		BridgeRow.ServoCount = ServoCount;
 		BridgeRow.VehiclePawnClass = VehiclePawnClass;
+		BridgeRow.bShowInUI = bShowInUI;
 		return BridgeRow;
 	}
 

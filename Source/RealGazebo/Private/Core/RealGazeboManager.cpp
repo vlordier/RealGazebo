@@ -40,6 +40,30 @@ ARealGazeboManager::ARealGazeboManager()
     // Initialize runtime DataTables
     RuntimeBridgeDataTable = nullptr;
     RuntimeUIDataTable = nullptr;
+
+    // Initialize default camera presets
+    CameraPresets.Empty();
+
+    // Preset 0 - VILS (Keyboard: 1)
+    FCameraPreset VILSPreset;
+    VILSPreset.PresetName = TEXT("VILS");
+    VILSPreset.Location = FVector(-3372.325356f, 1064.508698f, 10919.941478f);
+    VILSPreset.Rotation = FRotator(-89.900002f, -91.111628f, -0.000000f);
+    CameraPresets.Add(VILSPreset);
+
+    // Preset 1 - Urban (Keyboard: 2)
+    FCameraPreset UrbanPreset;
+    UrbanPreset.PresetName = TEXT("Urban");
+    UrbanPreset.Location = FVector(-31214.548424f, -16235.116186f, 18249.156533f);
+    UrbanPreset.Rotation = FRotator(-89.900002f, 172.132914f, -0.000000f);
+    CameraPresets.Add(UrbanPreset);
+
+    // Preset 2 - C-Track (Keyboard: 3)
+    FCameraPreset CTrackPreset;
+    CTrackPreset.PresetName = TEXT("C-Track");
+    CTrackPreset.Location = FVector(-59082.572512f, 4478.376668f, 23009.524176f);
+    CTrackPreset.Rotation = FRotator(-32.180821f, -0.412282f, -0.000000f);
+    CameraPresets.Add(CTrackPreset);
 }
 
 //----------------------------------------------------------
@@ -284,6 +308,15 @@ void ARealGazeboManager::InitializeCameraUI()
     );
 
     ViewerDirector = UISubsystem->GetViewerDirector();
+
+    // Configure camera presets on the viewer director
+    if (ViewerDirector.IsValid() && CameraPresets.Num() > 0)
+    {
+        ViewerDirector->SetCameraPresets(CameraPresets);
+        UE_LOG(LogRealGazebo, Log, TEXT("Configured %d camera presets on ViewerDirector"),
+               CameraPresets.Num());
+    }
+
     UISubsystem->SetMouseCursorAlwaysVisible(bAlwaysShowMouseCursor);
 
     bDidStartUI = true;

@@ -88,6 +88,13 @@ bool URealGazeboSubsystem::InitializeAllSubsystems()
         return true;
     }
 
+    // Validate settings are available
+    if (!CachedSettings)
+    {
+        UE_LOG(LogRealGazebo, Error, TEXT("RealGazebo Master Subsystem: Settings not available - cannot initialize"));
+        return false;
+    }
+
     bool bSuccess = true;
 
     // Initialize Bridge subsystem if enabled

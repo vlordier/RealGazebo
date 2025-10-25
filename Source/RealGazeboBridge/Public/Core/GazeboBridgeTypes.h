@@ -24,7 +24,7 @@ class AVehicleBasePawn;
 // - Theoretical Maximum: 256 types x 256 instances = 65,536 unique vehicles
 //
 // Practical Limits:
-// - MaxActiveVehicles: 255 (recommended for performance)
+// - MaxActiveVehicles: 256(recommended for performance)
 // - MaxActorsPerType:  256 (pool supports all instances per type)
 //----------------------------------------------------------
 
@@ -199,6 +199,11 @@ struct REALGAZEBOBRIDGE_API FBridgeVehicleConfigRow : public FTableRowBase
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vehicle Config", meta = (DisplayName = "Vehicle Pawn Class"))
     TSubclassOf<AVehicleBasePawn> VehiclePawnClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vehicle Config",
+              meta = (DisplayName = "Show In UI",
+                      ToolTip = "If false, this object will not appear in the UI vehicle list (useful for persons, props, etc.)"))
+    bool bShowInUI = true; // Default true for backward compatibility with existing vehicles
 
     // Performance settings for packet calculation
 

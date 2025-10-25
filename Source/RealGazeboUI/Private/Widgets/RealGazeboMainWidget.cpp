@@ -294,7 +294,7 @@ URealGazeboVehicleListItem* URealGazeboMainWidget::AddVehicleToList(const FVehic
     // Check if this vehicle type should be shown in UI
     if (!ShouldShowVehicleInUI(RuntimeData.VehicleType))
     {
-        UE_LOG(LogRealGazeboUI, Log, TEXT("Vehicle %s skipped - not shown in UI (ParentClass == NativeParentClass)"),
+        UE_LOG(LogRealGazeboUI, Log, TEXT("Vehicle %s skipped - not shown in UI (bShowInUI=false)"),
                *VehicleID.ToString());
         return nullptr;
     }
@@ -404,34 +404,16 @@ bool URealGazeboMainWidget::ShouldShowVehicleInUI(uint8 VehicleType) const
         return false;
     }
 
-    // Get the vehicle class
-    UClass* VehicleClass = Config.VehiclePawnClass;
-
-    // Check if this is a Blueprint class
-    UBlueprintGeneratedClass* BlueprintClass = Cast<UBlueprintGeneratedClass>(VehicleClass);
-    if (!BlueprintClass)
+    // Use the bShowInUI flag from DataTable configuration
+    if (!Config.bShowInUI)
     {
-        // Not a Blueprint, it's a native C++ class - don't show
-        UE_LOG(LogRealGazeboUI, Log, TEXT("Vehicle Type %d (%s): Native C++ class - NOT shown in UI"),
+        UE_LOG(LogRealGazeboUI, Log, TEXT("Vehicle Type %d (%s): bShowInUI=false - NOT shown in UI"),
                VehicleType, *Config.VehicleName);
         return false;
     }
 
-    // It's a Blueprint - check if parent is also a Blueprint
-    UClass* ParentClass = VehicleClass->GetSuperClass();
-    if (!ParentClass)
-    {
-        UE_LOG(LogRealGazeboUI, Warning, TEXT("Vehicle Type %d (%s): No parent class - NOT shown in UI"),
-               VehicleType, *Config.VehicleName);
-        return false;
-    }
-
-    UBlueprintGeneratedClass* ParentBlueprintClass = Cast<UBlueprintGeneratedClass>(ParentClass);
-
-    // Show in UI only if:
-    // - VehicleClass is a Blueprint (already checked)
-    // - ParentClass is also a Blueprint (not a native C++ class)
-    return (ParentBlueprintClass != nullptr);
+    // Show in UI if bShowInUI is true
+    return true;
 }
 
 void URealGazeboMainWidget::OnVehicleItemSelectionChanged(UObject* SelectedItem)
