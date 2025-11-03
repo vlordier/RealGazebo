@@ -36,27 +36,27 @@ ARealGazeboCameraUIManager::ARealGazeboCameraUIManager()
     WidgetInViewportStatus = false;
 
     // Initialize default camera presets
-    CameraPresets.Empty();
+    CameraPresets.Empty();  
 
     // Preset 0 - VILS (Keyboard: 1)
     FCameraPreset VILSPreset;
     VILSPreset.PresetName = TEXT("VILS");
-    VILSPreset.Location = FVector(-3372.325356f, 1064.508698f, 10919.941478f);
-    VILSPreset.Rotation = FRotator(-89.900002f, -91.111628f, -0.000000f);
+    VILSPreset.Location = FVector(-2492.325356f, 1164.508698f, 6482.866281f);
+    VILSPreset.Rotation = FRotator(-90.0f, 179.0f, 90.0f);
     CameraPresets.Add(VILSPreset);
 
     // Preset 1 - Urban (Keyboard: 2)
     FCameraPreset UrbanPreset;
     UrbanPreset.PresetName = TEXT("Urban");
-    UrbanPreset.Location = FVector(-31214.548424f, -16235.116186f, 18249.156533f);
-    UrbanPreset.Rotation = FRotator(-89.900002f, 172.132914f, -0.000000f);
+    UrbanPreset.Location = FVector(-31214.548424f, -17165.116186f, 14063.83629f);
+    UrbanPreset.Rotation = FRotator(-90.0f, 82.0f, 90.0f);
     CameraPresets.Add(UrbanPreset);
 
     // Preset 2 - C-Track (Keyboard: 3)
     FCameraPreset CTrackPreset;
     CTrackPreset.PresetName = TEXT("C-Track");
-    CTrackPreset.Location = FVector(-59082.572512f, 4478.376668f, 23009.524176f);
-    CTrackPreset.Rotation = FRotator(-32.180821f, -0.412282f, -0.000000f);
+    CTrackPreset.Location = FVector(-51227.306531f, 365.946978f, 23915.965271f);
+    CTrackPreset.Rotation = FRotator(-42.104438f, 0.0f, 0.0f);
     CameraPresets.Add(CTrackPreset);
 }
 
