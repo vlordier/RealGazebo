@@ -189,11 +189,11 @@ void URealGazeboVehicleEntry::UpdatePositionText()
         return;
     }
     
-    // Show simplified position
-    FString PositionString = FString::Printf(TEXT("%.0f, %.0f, %.0f"), 
-                                           VehicleListItem->Position.X, 
-                                           VehicleListItem->Position.Y, 
-                                           VehicleListItem->Position.Z);
+    // Show simplified position in meters (convert from cm)
+    FString PositionString = FString::Printf(TEXT("%.2f, %.2f, %.2f"),
+                                           VehicleListItem->Position.X / 100.0f,
+                                           VehicleListItem->Position.Y / 100.0f,
+                                           VehicleListItem->Position.Z / 100.0f);
     
     PositionText->SetText(FText::FromString(PositionString));
 }
