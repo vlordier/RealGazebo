@@ -35,10 +35,16 @@ void URealGazeboVehicleListItem::UpdateFromRuntimeData(const FVehicleRuntimeData
     Position = RuntimeData.Position;
     Rotation = RuntimeData.Rotation.Rotator();
 
-    // Update battery and navigation state
-    BatteryPercentage = RuntimeData.BatteryRemaining * 100.0f; // Convert 0.0-1.0 to 0-100
-    NavState = RuntimeData.NavState;
-    Status = NavigationStateToString(RuntimeData.NavState);
+    // Update battery and navigation state only if valid data has been received
+    // RuntimeData starts with BatteryRemaining = -1.0, which indicates no AdditionalData packet yet
+    if (RuntimeData.BatteryRemaining >= 0.0f)
+    {
+        // Valid battery data received, update both battery and nav state
+        BatteryPercentage = RuntimeData.BatteryRemaining * 100.0f; // Convert 0.0-1.0 to 0-100
+        NavState = RuntimeData.NavState;
+        Status = NavigationStateToString(RuntimeData.NavState);
+    }
+    // else: keep existing values ("--" for battery, "--" for status) until data arrives
 
     // Update timing
     LastUpdateTime = FPlatformTime::Seconds();
