@@ -134,6 +134,15 @@ private:
     /** Input handler for camera preset 3 (3 key - C-Track) */
     void InputPreset3();
 
+    /** Input handler for camera preset 4 (4 key - Urban Fixed Camera 1) */
+    void InputPreset4();
+
+    /** Input handler for camera preset 5 (5 key - Urban Fixed Camera 2) */
+    void InputPreset5();
+
+    /** Input handler for camera preset 6 (6 key - Urban Fixed Camera 3) */
+    void InputPreset6();
+
     //----------------------------------------------------------
     // Configuration
     //----------------------------------------------------------

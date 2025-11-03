@@ -58,6 +58,24 @@ ARealGazeboCameraUIManager::ARealGazeboCameraUIManager()
     CTrackPreset.Location = FVector(-51227.306531f, 365.946978f, 23915.965271f);
     CTrackPreset.Rotation = FRotator(-42.104438f, 0.0f, 0.0f);
     CameraPresets.Add(CTrackPreset);
+    
+    FCameraPreset UrbanFixedCamera1;
+    UrbanFixedCamera1.PresetName = TEXT("Urban Fixed Camera 1");
+    UrbanFixedCamera1.Location = FVector(-30306.131141f, -11882.833542f, 3200.0f);
+    UrbanFixedCamera1.Rotation = FRotator(-90.0f, -7.0f, 0.0f);
+    CameraPresets.Add(UrbanFixedCamera1);
+
+    FCameraPreset UrbanFixedCamera2;
+    UrbanFixedCamera2.PresetName = TEXT("Urban Fixed Camera 2");
+    UrbanFixedCamera2.Location = FVector(-33736.131141f, -14532.833542f, 3200.0f);
+    UrbanFixedCamera2.Rotation = FRotator(-90.0f, 90.0f, -8.5f);
+    CameraPresets.Add(UrbanFixedCamera2);
+
+    FCameraPreset UrbanFixedCamera3;
+    UrbanFixedCamera3.PresetName = TEXT("Urban Fixed Camera 3");
+    UrbanFixedCamera3.Location = FVector(-37006.131141f, -20582.833542f, 3200.0f);
+    UrbanFixedCamera3.Rotation = FRotator(-90.0f, 1.789911f, 348.210089f);
+    CameraPresets.Add(UrbanFixedCamera3);
 }
 
 void ARealGazeboCameraUIManager::BeginPlay()
