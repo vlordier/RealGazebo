@@ -167,6 +167,7 @@ public:
     void UpdateVehicleData(const FBridgePoseData& PoseData);
     void UpdateVehicleMotorData(const FBridgeMotorSpeedData& MotorData);
     void UpdateVehicleServoData(const FBridgeServoData& ServoData);
+    void UpdateVehicleAdditionalData(const FBridgeAdditionalData& AdditionalData);
 
     /** Batch update system */
     void BatchUpdateVehicles();
@@ -225,6 +226,9 @@ protected:
 
     UFUNCTION()
     void OnServoDataReceived(const FBridgeServoData& ServoData);
+
+    UFUNCTION()
+    void OnAdditionalDataReceived(const FBridgeAdditionalData& AdditionalData);
 
 private:
     /** Bridge active state (thread-safe atomic) */

@@ -352,18 +352,28 @@ void UGazeboBridgeSubsystem::UpdateVehicleServoData(const FBridgeServoData& Serv
     if (FVehicleRuntimeData* RuntimeData = VehicleDataMap.Find(VehicleID))
     {
         RuntimeData->ServoPositions = ServoData.ServoPositions;
-        
+
         // Convert FRotator array to FQuat array
         RuntimeData->ServoRotations.Empty();
         for (const FRotator& Rotation : ServoData.ServoRotations)
         {
             RuntimeData->ServoRotations.Add(Rotation.Quaternion());
         }
-        
+
         if (AVehicleBasePawn* VisualPawn = RuntimeData->VisualPawn.Get())
         {
             VisualPawn->UpdateServoStates(RuntimeData->ServoPositions, RuntimeData->ServoRotations);
         }
+    }
+}
+
+void UGazeboBridgeSubsystem::UpdateVehicleAdditionalData(const FBridgeAdditionalData& AdditionalData)
+{
+    const FVehicleID VehicleID = AdditionalData.GetVehicleID();
+    if (FVehicleRuntimeData* RuntimeData = VehicleDataMap.Find(VehicleID))
+    {
+        RuntimeData->BatteryRemaining = AdditionalData.BatteryRemaining;
+        RuntimeData->NavState = AdditionalData.NavState;
     }
 }
 
@@ -478,4 +488,9 @@ void UGazeboBridgeSubsystem::OnMotorSpeedDataReceived(const FBridgeMotorSpeedDat
 void UGazeboBridgeSubsystem::OnServoDataReceived(const FBridgeServoData& ServoData)
 {
     UpdateVehicleServoData(ServoData);
+}
+
+void UGazeboBridgeSubsystem::OnAdditionalDataReceived(const FBridgeAdditionalData& AdditionalData)
+{
+    UpdateVehicleAdditionalData(AdditionalData);
 }

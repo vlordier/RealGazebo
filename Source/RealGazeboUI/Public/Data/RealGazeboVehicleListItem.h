@@ -49,16 +49,20 @@ public:
     FRotator Rotation;
 
     //----------------------------------------------------------
-    // Future Telemetry Data (Placeholders)
+    // Telemetry Data
     //----------------------------------------------------------
 
-    /** Battery percentage (0-100) - placeholder for future implementation */
+    /** Battery percentage (0-100) */
     UPROPERTY(BlueprintReadWrite, Category = "Vehicle Data")
     float BatteryPercentage;
 
     /** Vehicle operational status */
     UPROPERTY(BlueprintReadWrite, Category = "Vehicle Data")
     FString Status;
+
+    /** Navigation state from PX4 */
+    UPROPERTY(BlueprintReadWrite, Category = "Vehicle Data")
+    ENavigationState NavState;
 
     //----------------------------------------------------------
     // Update Methods

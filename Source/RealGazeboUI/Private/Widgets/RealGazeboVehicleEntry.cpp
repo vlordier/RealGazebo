@@ -156,9 +156,17 @@ void URealGazeboVehicleEntry::UpdateNonFoldingBatteryDisplay()
     {
         return;
     }
-    
-    // Display same battery info as folding panel
-    FString BatteryString = TEXT("null");
+
+    // Display battery percentage (or "--" if no data)
+    FString BatteryString;
+    if (VehicleListItem->BatteryPercentage < 0.0f)
+    {
+        BatteryString = TEXT("--");
+    }
+    else
+    {
+        BatteryString = FString::Printf(TEXT("%.0f%%"), VehicleListItem->BatteryPercentage);
+    }
     NonFoldingBatteryText->SetText(FText::FromString(BatteryString));
 }
 
@@ -196,9 +204,17 @@ void URealGazeboVehicleEntry::UpdateBatteryDisplay()
     {
         return;
     }
-    
-    // Display "null" since battery is placeholder for future implementation
-    FString BatteryString = TEXT("null");
+
+    // Display battery percentage (or "--" if no data)
+    FString BatteryString;
+    if (VehicleListItem->BatteryPercentage < 0.0f)
+    {
+        BatteryString = TEXT("--");
+    }
+    else
+    {
+        BatteryString = FString::Printf(TEXT("%.0f%%"), VehicleListItem->BatteryPercentage);
+    }
     BatteryText->SetText(FText::FromString(BatteryString));
 }
 
@@ -208,9 +224,9 @@ void URealGazeboVehicleEntry::UpdateStatusDisplay()
     {
         return;
     }
-    
-    // Display "null" since status is placeholder for future implementation
-    FString FormattedStatus = TEXT("null");
+
+    // Display navigation state status
+    FString FormattedStatus = VehicleListItem->Status;
     StatusText->SetText(FText::FromString(FormattedStatus));
 }
 

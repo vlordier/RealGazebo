@@ -20,11 +20,12 @@ void URealGazeboVehicleListItem::InitializeDefaults()
     VehicleTypeName = TEXT("Unknown");
     Position = FVector::ZeroVector;
     Rotation = FRotator::ZeroRotator;
-    
-    // Placeholder values for future telemetry
-    BatteryPercentage = 100.0f;
-    Status = TEXT("No Data");
-    
+
+    // Initialize telemetry values with "no data" defaults
+    BatteryPercentage = -1.0f; // -1 indicates no data received yet
+    Status = TEXT("--");
+    NavState = ENavigationState::MANUAL;
+
     LastUpdateTime = FPlatformTime::Seconds();
 }
 
@@ -33,14 +34,14 @@ void URealGazeboVehicleListItem::UpdateFromRuntimeData(const FVehicleRuntimeData
     // Update core transform data
     Position = RuntimeData.Position;
     Rotation = RuntimeData.Rotation.Rotator();
-    
+
+    // Update battery and navigation state
+    BatteryPercentage = RuntimeData.BatteryRemaining * 100.0f; // Convert 0.0-1.0 to 0-100
+    NavState = RuntimeData.NavState;
+    Status = NavigationStateToString(RuntimeData.NavState);
+
     // Update timing
     LastUpdateTime = FPlatformTime::Seconds();
-    
-    // Keep status as placeholder
-    Status = TEXT("No Data");
-    
-    // Vehicle data updated
 }
 
 void URealGazeboVehicleListItem::UpdateTransform(const FVector& NewPosition, const FRotator& NewRotation)
@@ -48,9 +49,6 @@ void URealGazeboVehicleListItem::UpdateTransform(const FVector& NewPosition, con
     Position = NewPosition;
     Rotation = NewRotation;
     LastUpdateTime = FPlatformTime::Seconds();
-    
-    // Keep status as placeholder
-    Status = TEXT("No Data");
 }
 
 

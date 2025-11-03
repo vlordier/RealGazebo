@@ -139,6 +139,70 @@ struct REALGAZEBOBRIDGE_API FBridgeServoData
 };
 
 //----------------------------------------------------------
+// Navigation State Enum (PX4 Navigation States)
+//----------------------------------------------------------
+
+UENUM(BlueprintType)
+enum class ENavigationState : uint8
+{
+    MANUAL = 0              UMETA(DisplayName = "Manual"),
+    ALTCTL = 1              UMETA(DisplayName = "Altitude Control"),
+    POSCTL = 2              UMETA(DisplayName = "Position Control"),
+    AUTO_MISSION = 3        UMETA(DisplayName = "Auto Mission"),
+    AUTO_LOITER = 4         UMETA(DisplayName = "Auto Loiter"),
+    AUTO_RTL = 5            UMETA(DisplayName = "Auto RTL"),
+    POSITION_SLOW = 6       UMETA(DisplayName = "Position Slow"),
+    FREE5 = 7               UMETA(DisplayName = "Free 5"),
+    ALTITUDE_CRUISE = 8     UMETA(DisplayName = "Altitude Cruise"),
+    FREE3 = 9               UMETA(DisplayName = "Free 3"),
+    ACRO = 10               UMETA(DisplayName = "Acro"),
+    FREE2 = 11              UMETA(DisplayName = "Free 2"),
+    DESCEND = 12            UMETA(DisplayName = "Descend"),
+    TERMINATION = 13        UMETA(DisplayName = "Termination"),
+    OFFBOARD = 14           UMETA(DisplayName = "Offboard"),
+    STAB = 15               UMETA(DisplayName = "Stabilized"),
+    FREE1 = 16              UMETA(DisplayName = "Free 1"),
+    AUTO_TAKEOFF = 17       UMETA(DisplayName = "Auto Takeoff"),
+    AUTO_LAND = 18          UMETA(DisplayName = "Auto Land"),
+    AUTO_FOLLOW_TARGET = 19 UMETA(DisplayName = "Auto Follow Target"),
+    AUTO_PRECLAND = 20      UMETA(DisplayName = "Precision Land"),
+    ORBIT = 21              UMETA(DisplayName = "Orbit"),
+    AUTO_VTOL_TAKEOFF = 22  UMETA(DisplayName = "VTOL Takeoff"),
+    EXTERNAL1 = 23          UMETA(DisplayName = "External 1"),
+    EXTERNAL2 = 24          UMETA(DisplayName = "External 2"),
+    EXTERNAL3 = 25          UMETA(DisplayName = "External 3"),
+    EXTERNAL4 = 26          UMETA(DisplayName = "External 4"),
+    EXTERNAL5 = 27          UMETA(DisplayName = "External 5"),
+    EXTERNAL6 = 28          UMETA(DisplayName = "External 6"),
+    EXTERNAL7 = 29          UMETA(DisplayName = "External 7"),
+    EXTERNAL8 = 30          UMETA(DisplayName = "External 8"),
+    MAX = 31                UMETA(DisplayName = "Max")
+};
+
+USTRUCT(BlueprintType)
+struct REALGAZEBOBRIDGE_API FBridgeAdditionalData
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Header")
+    uint8 VehicleNum = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Header")
+    uint8 VehicleType = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Header")
+    uint8 MessageID = 5;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Additional Data")
+    float BatteryRemaining = 1.0f; // 0.0 ~ 1.0
+
+    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Additional Data")
+    ENavigationState NavState = ENavigationState::MANUAL;
+
+    FVehicleID GetVehicleID() const { return FVehicleID(VehicleNum, VehicleType); }
+};
+
+//----------------------------------------------------------
 // Optimized Runtime Data (for subsystem storage)
 //----------------------------------------------------------
 
@@ -162,6 +226,13 @@ struct REALGAZEBOBRIDGE_API FVehicleRuntimeData
 
     UPROPERTY(BlueprintReadWrite, Category = "Bridge|Runtime")
     TArray<FQuat> ServoRotations;
+
+    // Battery and Navigation State
+    UPROPERTY(BlueprintReadWrite, Category = "Bridge|Status")
+    float BatteryRemaining = -1.0f; // -1.0 = no data, 0.0 ~ 1.0 = actual battery level
+
+    UPROPERTY(BlueprintReadWrite, Category = "Bridge|Status")
+    ENavigationState NavState = ENavigationState::MANUAL;
 
     // Performance tracking
     UPROPERTY(BlueprintReadOnly, Category = "Bridge|Performance")
@@ -229,12 +300,44 @@ typedef FBridgeServoData FGazeboServoData;
 typedef FBridgeVehicleConfigRow FGazeboVehicleTableRow;
 
 //----------------------------------------------------------
+// Helper Function: Convert NavigationState to Display String
+//----------------------------------------------------------
+
+inline FString NavigationStateToString(ENavigationState NavState)
+{
+    switch (NavState)
+    {
+        case ENavigationState::MANUAL: return TEXT("Manual");
+        case ENavigationState::ALTCTL: return TEXT("Altitude Control");
+        case ENavigationState::POSCTL: return TEXT("Position Control");
+        case ENavigationState::AUTO_MISSION: return TEXT("Auto Mission");
+        case ENavigationState::AUTO_LOITER: return TEXT("Auto Loiter");
+        case ENavigationState::AUTO_RTL: return TEXT("Auto RTL");
+        case ENavigationState::POSITION_SLOW: return TEXT("Position Slow");
+        case ENavigationState::ALTITUDE_CRUISE: return TEXT("Altitude Cruise");
+        case ENavigationState::ACRO: return TEXT("Acro");
+        case ENavigationState::DESCEND: return TEXT("Descend");
+        case ENavigationState::TERMINATION: return TEXT("Termination");
+        case ENavigationState::OFFBOARD: return TEXT("Offboard");
+        case ENavigationState::STAB: return TEXT("Stabilized");
+        case ENavigationState::AUTO_TAKEOFF: return TEXT("Auto Takeoff");
+        case ENavigationState::AUTO_LAND: return TEXT("Auto Land");
+        case ENavigationState::AUTO_FOLLOW_TARGET: return TEXT("Auto Follow");
+        case ENavigationState::AUTO_PRECLAND: return TEXT("Precision Land");
+        case ENavigationState::ORBIT: return TEXT("Orbit");
+        case ENavigationState::AUTO_VTOL_TAKEOFF: return TEXT("VTOL Takeoff");
+        default: return TEXT("Unknown");
+    }
+}
+
+//----------------------------------------------------------
 // Event Delegates
 //----------------------------------------------------------
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVehicleDataReceived, const FBridgePoseData&, VehicleData);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMotorSpeedDataReceived, const FBridgeMotorSpeedData&, MotorSpeedData);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnServoDataReceived, const FBridgeServoData&, ServoData);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAdditionalDataReceived, const FBridgeAdditionalData&, AdditionalData);
 
 // Legacy delegate aliases
 typedef FOnVehicleDataReceived FOnGazeboVehicleDataReceived;

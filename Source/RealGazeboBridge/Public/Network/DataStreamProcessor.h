@@ -95,6 +95,7 @@ public:
     std::atomic<int32> TotalValidPosePackets;
     std::atomic<int32> TotalValidMotorPackets;
     std::atomic<int32> TotalValidServoPackets;
+    std::atomic<int32> TotalValidAdditionalPackets;
     std::atomic<int32> TotalInvalidPackets;
     std::atomic<int32> TotalDestroyedVehicles;  // Count of vehicles destroyed via 3-byte packets
 
@@ -113,6 +114,9 @@ public:
 
     UPROPERTY(BlueprintAssignable, Category = "Bridge|Events")
     FOnServoDataReceived OnServoDataReceived;
+
+    UPROPERTY(BlueprintAssignable, Category = "Bridge|Events")
+    FOnAdditionalDataReceived OnAdditionalDataReceived;
 
 protected:
     //----------------------------------------------------------
@@ -157,6 +161,7 @@ protected:
     bool ParsePosePacket(const TArray<uint8>& RawData, FBridgePoseData& OutPoseData);
     bool ParseMotorSpeedPacket(const TArray<uint8>& RawData, FBridgeMotorSpeedData& OutMotorData);
     bool ParseServoPacket(const TArray<uint8>& RawData, FBridgeServoData& OutServoData);
+    bool ParseAdditionalDataPacket(const TArray<uint8>& RawData, FBridgeAdditionalData& OutAdditionalData);
 
     /** Low-level data conversion */
     float BytesToFloat(const TArray<uint8>& Data, int32 StartIndex) const;
@@ -202,6 +207,7 @@ protected:
     void HandlePoseData(const FBridgePoseData& PoseData);
     void HandleMotorSpeedData(const FBridgeMotorSpeedData& MotorData);
     void HandleServoData(const FBridgeServoData& ServoData);
+    void HandleAdditionalData(const FBridgeAdditionalData& AdditionalData);
 
     //----------------------------------------------------------
     // Error Handling and Logging

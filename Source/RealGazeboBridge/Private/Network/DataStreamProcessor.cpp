@@ -15,6 +15,7 @@ UDataStreamProcessor::UDataStreamProcessor()
     : TotalValidPosePackets(0)         // Atomic initialization
     , TotalValidMotorPackets(0)        // Atomic initialization
     , TotalValidServoPackets(0)        // Atomic initialization
+    , TotalValidAdditionalPackets(0)   // Atomic initialization
     , TotalInvalidPackets(0)           // Atomic initialization
     , TotalDestroyedVehicles(0)        // Atomic initialization
     , PacketCountSinceLastUpdate(0)    // Atomic initialization
@@ -267,6 +268,20 @@ void UDataStreamProcessor::ProcessSinglePacket(const FUDPData& PacketData)
             }
             break;
         }
+        case 5: // Additional data (battery, nav state, etc.)
+        {
+            FBridgeAdditionalData AdditionalData;
+            if (ParseAdditionalDataPacket(PacketData.Data, AdditionalData))
+            {
+                TotalValidAdditionalPackets++;
+                HandleAdditionalData(AdditionalData);
+            }
+            else
+            {
+                TotalInvalidPackets++;
+            }
+            break;
+        }
         default:
         {
             TotalInvalidPackets++;
@@ -397,7 +412,7 @@ bool UDataStreamProcessor::ParseServoPacket(const TArray<uint8>& RawData, FBridg
     for (int32 i = 0; i < ServoCount; i++)
     {
         int32 StartIndex = PACKET_HEADER_SIZE + (i * 28);
-        
+
         if (StartIndex + 27 >= RawData.Num())
         {
             return false;
@@ -417,6 +432,44 @@ bool UDataStreamProcessor::ParseServoPacket(const TArray<uint8>& RawData, FBridg
         FQuat ServoQuat = ConvertGazeboQuaternionToUnreal(QuatX, QuatY, QuatZ, QuatW);
         OutServoData.ServoRotations.Add(ServoQuat.Rotator());
     }
+
+    return true;
+}
+
+bool UDataStreamProcessor::ParseAdditionalDataPacket(const TArray<uint8>& RawData, FBridgeAdditionalData& OutAdditionalData)
+{
+    // Expected packet size: 3 (header) + 4 (battery float) + 1 (nav state uint8) = 8 bytes
+    constexpr int32 EXPECTED_ADDITIONAL_DATA_SIZE = 8;
+
+    if (RawData.Num() != EXPECTED_ADDITIONAL_DATA_SIZE)
+    {
+        return false;
+    }
+
+    // Parse header
+    OutAdditionalData.VehicleNum = RawData[0];
+    OutAdditionalData.VehicleType = RawData[1];
+    OutAdditionalData.MessageID = RawData[2];
+
+    // Validate message ID
+    if (OutAdditionalData.MessageID != 5)
+    {
+        return false;
+    }
+
+    // Parse battery remaining (bytes 3-6, float)
+    OutAdditionalData.BatteryRemaining = BytesToFloat(RawData, 3);
+
+    // Parse navigation state (byte 7, uint8)
+    uint8 NavStateValue = RawData[7];
+
+    // Validate nav state range (0-31)
+    if (NavStateValue > static_cast<uint8>(ENavigationState::MAX))
+    {
+        NavStateValue = 0; // Default to MANUAL if invalid
+    }
+
+    OutAdditionalData.NavState = static_cast<ENavigationState>(NavStateValue);
 
     return true;
 }
@@ -496,9 +549,21 @@ void UDataStreamProcessor::HandleServoData(const FBridgeServoData& ServoData)
     {
         Subsystem->UpdateVehicleServoData(ServoData);
     }
-    
+
     // Broadcast for backward compatibility
     OnServoDataReceived.Broadcast(ServoData);
+}
+
+void UDataStreamProcessor::HandleAdditionalData(const FBridgeAdditionalData& AdditionalData)
+{
+    // Forward to bridge subsystem for processing
+    if (UGazeboBridgeSubsystem* Subsystem = BridgeSubsystem.Get())
+    {
+        Subsystem->UpdateVehicleAdditionalData(AdditionalData);
+    }
+
+    // Broadcast event
+    OnAdditionalDataReceived.Broadcast(AdditionalData);
 }
 
 int32 UDataStreamProcessor::GetExpectedMotorSpeedPacketSize(uint8 VehicleType) const
@@ -529,7 +594,7 @@ void UDataStreamProcessor::GetNetworkStatistics(int32& OutValidPackets, int32& O
                                               float& OutPacketsPerSecond, float& OutAverageProcessingTime) const
 {
     // Read atomic counters using load()
-    OutValidPackets = TotalValidPosePackets.load() + TotalValidMotorPackets.load() + TotalValidServoPackets.load();
+    OutValidPackets = TotalValidPosePackets.load() + TotalValidMotorPackets.load() + TotalValidServoPackets.load() + TotalValidAdditionalPackets.load();
     OutInvalidPackets = TotalInvalidPackets.load();
     OutPacketsPerSecond = PacketsPerSecond;
 
@@ -544,6 +609,7 @@ void UDataStreamProcessor::ResetStatistics()
     TotalValidPosePackets.store(0);
     TotalValidMotorPackets.store(0);
     TotalValidServoPackets.store(0);
+    TotalValidAdditionalPackets.store(0);
     TotalInvalidPackets.store(0);
     TotalDestroyedVehicles.store(0);
     PacketCountSinceLastUpdate.store(0);
@@ -587,13 +653,14 @@ void UDataStreamProcessor::LogPacketStatistics() const
     const int32 ValidPose = TotalValidPosePackets.load();
     const int32 ValidMotor = TotalValidMotorPackets.load();
     const int32 ValidServo = TotalValidServoPackets.load();
+    const int32 ValidAdditional = TotalValidAdditionalPackets.load();
     const int32 Invalid = TotalInvalidPackets.load();
     const int32 Destroyed = TotalDestroyedVehicles.load();
 
-    const int32 TotalValid = ValidPose + ValidMotor + ValidServo;
+    const int32 TotalValid = ValidPose + ValidMotor + ValidServo + ValidAdditional;
     const int32 TotalProcessed = TotalValid + Invalid + Destroyed;
     const float SuccessRate = TotalProcessed > 0 ? (float(TotalValid) / TotalProcessed * 100.0f) : 0.0f;
 
-    UE_LOG(LogRealGazeboBridge, Log, TEXT("DataStreamProcessor Stats: Valid=%d, Invalid=%d, Destroyed=%d, Rate=%.1f%%, PPS=%.1f"),
-           TotalValid, Invalid, Destroyed, SuccessRate, PacketsPerSecond);
+    UE_LOG(LogRealGazeboBridge, Log, TEXT("DataStreamProcessor Stats: Valid=%d (Pose=%d, Motor=%d, Servo=%d, Additional=%d), Invalid=%d, Destroyed=%d, Rate=%.1f%%, PPS=%.1f"),
+           TotalValid, ValidPose, ValidMotor, ValidServo, ValidAdditional, Invalid, Destroyed, SuccessRate, PacketsPerSecond);
 }
