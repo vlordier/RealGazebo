@@ -38,44 +38,61 @@ ARealGazeboCameraUIManager::ARealGazeboCameraUIManager()
     // Initialize default camera presets
     CameraPresets.Empty();  
 
-    // Preset 0 - VILS (Keyboard: 1)
+    // Preset 0 - C-Track (Keyboard: 1)
+    FCameraPreset CTrackPreset;
+    CTrackPreset.PresetName = TEXT("C-Track");
+    CTrackPreset.Location = FVector(-49985.707615f, -6242.985621f, 22005.642773f);
+    CTrackPreset.Rotation = FRotator(-32.369293f, 0.734925f, 0.0f);
+    CameraPresets.Add(CTrackPreset);
+    
+    // Preset 1 - VILS (Keyboard: 2)
     FCameraPreset VILSPreset;
     VILSPreset.PresetName = TEXT("VILS");
     VILSPreset.Location = FVector(-2492.325356f, 1164.508698f, 6482.866281f);
     VILSPreset.Rotation = FRotator(-90.0f, 179.0f, 90.0f);
     CameraPresets.Add(VILSPreset);
 
-    // Preset 1 - Urban (Keyboard: 2)
+    // Preset 2 - Urban (Keyboard: 3)
     FCameraPreset UrbanPreset;
     UrbanPreset.PresetName = TEXT("Urban");
     UrbanPreset.Location = FVector(-31214.548424f, -17165.116186f, 14063.83629f);
     UrbanPreset.Rotation = FRotator(-90.0f, 82.0f, 90.0f);
     CameraPresets.Add(UrbanPreset);
 
-    // Preset 2 - C-Track (Keyboard: 3)
-    FCameraPreset CTrackPreset;
-    CTrackPreset.PresetName = TEXT("C-Track");
-    CTrackPreset.Location = FVector(-51227.306531f, 365.946978f, 23915.965271f);
-    CTrackPreset.Rotation = FRotator(-42.104438f, 0.0f, 0.0f);
-    CameraPresets.Add(CTrackPreset);
-    
-    FCameraPreset UrbanFixedCamera1;
-    UrbanFixedCamera1.PresetName = TEXT("Urban Fixed Camera 1");
-    UrbanFixedCamera1.Location = FVector(-30306.131141f, -11882.833542f, 3200.0f);
-    UrbanFixedCamera1.Rotation = FRotator(-90.0f, -7.0f, 0.0f);
-    CameraPresets.Add(UrbanFixedCamera1);
+    // Preset 3 - BeltWay Camera (Keyboard: 4)
+    FCameraPreset BeltWayCamera;
+    BeltWayCamera.PresetName = TEXT("BeltWay Camera");
+    BeltWayCamera.Location = FVector(-10369.975632f, 6390.696626f, 32605.926715f);
+    BeltWayCamera.Rotation = FRotator(-90.0f, 180.0f, 0.0f);
+    CameraPresets.Add(BeltWayCamera);
 
-    FCameraPreset UrbanFixedCamera2;
-    UrbanFixedCamera2.PresetName = TEXT("Urban Fixed Camera 2");
-    UrbanFixedCamera2.Location = FVector(-33736.131141f, -14532.833542f, 3200.0f);
-    UrbanFixedCamera2.Rotation = FRotator(-90.0f, 90.0f, -8.5f);
-    CameraPresets.Add(UrbanFixedCamera2);
+    // Preset 4 - DirtRoad Camera (Keyboard: 5)
+    FCameraPreset DirtRoadCamera;
+    DirtRoadCamera.PresetName = TEXT("DirtRoad Camera");
+    DirtRoadCamera.Location = FVector(-8113.290445f, 7729.819206f, 1092.474938f);
+    DirtRoadCamera.Rotation = FRotator(-16.04874f, -18.656375f, 0.0f);
+    CameraPresets.Add(DirtRoadCamera);
 
-    FCameraPreset UrbanFixedCamera3;
-    UrbanFixedCamera3.PresetName = TEXT("Urban Fixed Camera 3");
-    UrbanFixedCamera3.Location = FVector(-37006.131141f, -20582.833542f, 3200.0f);
-    UrbanFixedCamera3.Rotation = FRotator(-90.0f, 1.789911f, 348.210089f);
-    CameraPresets.Add(UrbanFixedCamera3);
+    // Preset 5 - Forest Camera (Keyboard: 6)
+    FCameraPreset ForestCamera;
+    ForestCamera.PresetName = TEXT("Forest Camera");
+    ForestCamera.Location = FVector(2213.234064f, 22609.036801f, 487.442638f);
+    ForestCamera.Rotation = FRotator(-2.762647f, 77.978291f, 0.0f);
+    CameraPresets.Add(ForestCamera);
+
+    // Preset 6 - Lake Camera (Keyboard: 7)
+    FCameraPreset LakeCamera;
+    LakeCamera.PresetName = TEXT("Lake Camera");
+    LakeCamera.Location = FVector(-28342.004076f, 20093.002073f, 2293.668522f);
+    LakeCamera.Rotation = FRotator(-12.077954f, 76.339822f, 0.0f);
+    CameraPresets.Add(LakeCamera);
+
+    // Preset 7 - Stone Camera (Keyboard: 8)
+    FCameraPreset StoneCamera;
+    StoneCamera.PresetName = TEXT("Stone Camera");
+    StoneCamera.Location = FVector(-26708.905399f, -11020.745198f, 1590.415018f);
+    StoneCamera.Rotation = FRotator(-24.356305f, -9.428322f, 0.0f);
+    CameraPresets.Add(StoneCamera);
 }
 
 void ARealGazeboCameraUIManager::BeginPlay()

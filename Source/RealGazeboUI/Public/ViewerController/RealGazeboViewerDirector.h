@@ -125,23 +125,29 @@ private:
     /** Input handler for third person camera mode (B key) */
     void InputThirdPersonCamera();
 
-    /** Input handler for camera preset 1 (1 key - VILS) */
+    /** Input handler for camera preset 1 (1 key - C-Track) */
     void InputPreset1();
 
-    /** Input handler for camera preset 2 (2 key - Urban) */
+    /** Input handler for camera preset 2 (2 key - VILS) */
     void InputPreset2();
 
-    /** Input handler for camera preset 3 (3 key - C-Track) */
+    /** Input handler for camera preset 3 (3 key - Urban) */
     void InputPreset3();
 
-    /** Input handler for camera preset 4 (4 key - Urban Fixed Camera 1) */
+    /** Input handler for camera preset 4 (4 key - BeltWay Camera) */
     void InputPreset4();
 
-    /** Input handler for camera preset 5 (5 key - Urban Fixed Camera 2) */
+    /** Input handler for camera preset 5 (5 key - DirtRoad Camera) */
     void InputPreset5();
 
-    /** Input handler for camera preset 6 (6 key - Urban Fixed Camera 3) */
+    /** Input handler for camera preset 6 (6 key - Forest Camera) */
     void InputPreset6();
+
+    /** Input handler for camera preset 7 (7 key - Lake Camera) */
+    void InputPreset7();
+
+    /** Input handler for camera preset 8 (8 key - Stone Camera) */
+    void InputPreset8();
 
     //----------------------------------------------------------
     // Configuration
