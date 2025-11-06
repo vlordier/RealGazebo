@@ -44,26 +44,54 @@ ARealGazeboManager::ARealGazeboManager()
     // Initialize default camera presets
     CameraPresets.Empty();
 
-    // Preset 0 - VILS (Keyboard: 1)
+    // Preset 0 - C-Track (Keyboard: 1)
+    FCameraPreset CTrackPreset;
+    CTrackPreset.PresetName = TEXT("C-Track");
+    CTrackPreset.Location = FVector(-49985.707615f, -6242.985621f, 22005.642773f);
+    CTrackPreset.Rotation = FRotator(-32.369293f, 0.734925f, 0.0f);
+    CameraPresets.Add(CTrackPreset);
+    
+    // Preset 1 - VILS (Keyboard: 2)
     FCameraPreset VILSPreset;
     VILSPreset.PresetName = TEXT("VILS");
     VILSPreset.Location = FVector(-2492.325356f, 1164.508698f, 6482.866281f);
     VILSPreset.Rotation = FRotator(-90.0f, 179.0f, 90.0f);
     CameraPresets.Add(VILSPreset);
 
-    // Preset 1 - Urban (Keyboard: 2)
+    // Preset 2 - Urban (Keyboard: 3)
     FCameraPreset UrbanPreset;
     UrbanPreset.PresetName = TEXT("Urban");
     UrbanPreset.Location = FVector(-31214.548424f, -17165.116186f, 14063.83629f);
     UrbanPreset.Rotation = FRotator(-90.0f, 82.0f, 90.0f);
     CameraPresets.Add(UrbanPreset);
 
-    // Preset 2 - C-Track (Keyboard: 3)
-    FCameraPreset CTrackPreset;
-    CTrackPreset.PresetName = TEXT("C-Track");
-    CTrackPreset.Location = FVector(-51227.306531f, 365.946978f, 23915.965271f);
-    CTrackPreset.Rotation = FRotator(-42.104438f, 0.0f, 0.0f);
-    CameraPresets.Add(CTrackPreset);
+    // Preset 3 - BeltWay Camera (Keyboard: 4)
+    FCameraPreset BeltWayCamera;
+    BeltWayCamera.PresetName = TEXT("BeltWay Camera");
+    BeltWayCamera.Location = FVector(-10369.975632f, 6390.696626f, 32605.926715f);
+    BeltWayCamera.Rotation = FRotator(-90.0f, 180.0f, 0.0f);
+    CameraPresets.Add(BeltWayCamera);
+
+    // Preset 4 - DirtRoad Camera (Keyboard: 5)
+    FCameraPreset DirtRoadCamera;
+    DirtRoadCamera.PresetName = TEXT("DirtRoad Camera");
+    DirtRoadCamera.Location = FVector(-8113.290445f, 7729.819206f, 1092.474938f);
+    DirtRoadCamera.Rotation = FRotator(-16.04874f, -18.656375f, 0.0f);
+    CameraPresets.Add(DirtRoadCamera);
+
+    // Preset 5 - Forest Camera (Keyboard: 6)
+    FCameraPreset ForestCamera;
+    ForestCamera.PresetName = TEXT("Forest Camera");
+    ForestCamera.Location = FVector(2213.234064f, 22609.036801f, 487.442638f);
+    ForestCamera.Rotation = FRotator(-2.762647f, 77.978291f, 0.0f);
+    CameraPresets.Add(ForestCamera);
+
+    // Preset 6 - Lake Camera (Keyboard: 7)
+    FCameraPreset LakeCamera;
+    LakeCamera.PresetName = TEXT("Lake Camera");
+    LakeCamera.Location = FVector(-28342.004076f, 20093.002073f, 2293.668522f);
+    LakeCamera.Rotation = FRotator(-12.077954f, 76.339822f, 0.0f);
+    CameraPresets.Add(LakeCamera);
 }
 
 //----------------------------------------------------------
