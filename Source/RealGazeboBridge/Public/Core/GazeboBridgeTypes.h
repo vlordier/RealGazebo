@@ -326,6 +326,15 @@ inline FString NavigationStateToString(ENavigationState NavState)
         case ENavigationState::AUTO_PRECLAND: return TEXT("Precision Land");
         case ENavigationState::ORBIT: return TEXT("Orbit");
         case ENavigationState::AUTO_VTOL_TAKEOFF: return TEXT("VTOL Takeoff");
+        case ENavigationState::EXTERNAL1: return TEXT("External 1");
+        case ENavigationState::EXTERNAL2: return TEXT("External 2");
+        case ENavigationState::EXTERNAL3: return TEXT("External 3");
+        case ENavigationState::EXTERNAL4: return TEXT("External 4");
+        case ENavigationState::EXTERNAL5: return TEXT("External 5");
+        case ENavigationState::EXTERNAL6: return TEXT("External 6");
+        case ENavigationState::EXTERNAL7: return TEXT("External 7");
+        case ENavigationState::EXTERNAL8: return TEXT("External 8");
+        case ENavigationState::MAX: return TEXT("Max");
         default: return TEXT("Unknown");
     }
 }
