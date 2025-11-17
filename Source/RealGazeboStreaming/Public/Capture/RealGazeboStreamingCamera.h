@@ -44,35 +44,39 @@ protected:
 	//~ End UActorComponent Interface
 
 public:
-	// Configuration Properties
+	//========================================
+	// USER CONFIGURATION (Edit These)
+	//========================================
 
-	/** Camera ID for multi-camera vehicles (e.g., "fpv", "gimbal", "rear"). Leave empty for single camera setups. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Configuration", meta = (
-		DisplayName = "Camera ID",
-		ToolTip = "Optional camera identifier for multi-camera vehicles. Leave empty for single camera setups."))
+	/** Camera ID - REQUIRED for RTSP URL (e.g., "front", "right", "gimbal"). Must be unique per vehicle. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Camera Settings", meta = (
+		DisplayName = "Camera ID (REQUIRED)",
+		ToolTip = "REQUIRED: Camera identifier for RTSP URL. Examples: 'front', 'right', 'gimbal', 'rear'. Must be unique per vehicle.\nRTSP URL format: rtsp://localhost:8554/{vehicle_id}/{camera_id}"))
 	FString CameraID;
 
-	/** Override auto-detected vehicle ID. Leave at 0,0 to auto-detect from owning VehicleBasePawn. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Streaming|Configuration", meta = (
-		DisplayName = "Override Vehicle ID (Auto-detected)",
-		ToolTip = "Manually set Vehicle ID. Leave at 0,0 to auto-detect from owning VehicleBasePawn."))
-	FVehicleID VehicleIDOverride;
-
 	/** Field of view in degrees */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Configuration", meta = (
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Camera Settings", meta = (
 		DisplayName = "Field of View",
 		ClampMin = "5.0", ClampMax = "170.0"))
 	float FieldOfView = 90.0f;
 
-	/** Auto-start streaming when component begins play */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Configuration", meta = (
-		DisplayName = "Auto Start"))
-	bool bAutoStart = false;
+	//========================================
+	// AUTO-DETECTED INFO (Read-Only)
+	//========================================
 
-	/** Frame capture rate in frames per second. Can differ from stream output frame rate. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Advanced", meta = (
-		DisplayName = "Capture Frame Rate",
-		ClampMin = "15", ClampMax = "60"))
+	/** Detected vehicle ID (auto-detected from VehicleBasePawn at runtime) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Streaming|Auto-Detected Info", meta = (
+		DisplayName = "Vehicle ID (Auto-Detected)"))
+	FVehicleID DetectedVehicleID;
+
+	/** Detected vehicle type name (e.g., "iris_1", "x500_2") */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Streaming|Auto-Detected Info", meta = (
+		DisplayName = "Vehicle Name (Auto-Detected)"))
+	FString DetectedVehicleTypeName;
+
+	/** Frame capture rate in frames per second (auto-set from StreamManager) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Streaming|Auto-Detected Info", meta = (
+		DisplayName = "Capture Frame Rate"))
 	int32 CaptureFrameRate = 30;
 
 	// Streaming Control Methods
@@ -84,14 +88,6 @@ public:
 	/** Stop streaming this camera */
 	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
 	void StopStreaming();
-
-	/** Pause streaming without destroying the pipeline */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	void PauseStreaming();
-
-	/** Resume a paused stream */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	void ResumeStreaming();
 
 	/** Check if camera is currently streaming */
 	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming")
@@ -119,17 +115,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming")
 	class UTextureRenderTarget2D* GetRenderTarget() const { return RenderTarget; }
 
+	/** Update streaming settings from StreamManager at runtime (allows hot-reload of quality settings) */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
+	void UpdateStreamingSettings();
+
 	// Debug Options
 
 	/** Enable on-screen debug information display */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Debug", meta = (
 		DisplayName = "Show Debug Info"))
 	bool bShowDebugInfo = false;
-
-	/** Color for debug text overlay */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Debug", meta = (
-		DisplayName = "Debug Color"))
-	FColor DebugColor = FColor::Cyan;
 
 private:
 	/** Initialize streaming system */
@@ -147,15 +142,12 @@ private:
 	/** Draw debug info overlay */
 	void DrawDebugInfo();
 
+	/** Validate CameraID is not empty (now always required) */
+	bool ValidateCameraID() const;
+
 	/** Cached streaming subsystem */
 	UPROPERTY(Transient)
 	URealGazeboStreamingSubsystem* StreamingSubsystem = nullptr;
-
-	/** Detected or overridden vehicle ID (set during BeginPlay) */
-	FVehicleID DetectedVehicleID;
-
-	/** Detected vehicle type name (e.g., "X500", "Iris") for RTSP URLs */
-	FString DetectedVehicleTypeName;
 
 	/** Scene capture component (created dynamically) */
 	UPROPERTY(Transient)
@@ -165,15 +157,27 @@ private:
 	UPROPERTY(Transient)
 	class UTextureRenderTarget2D* RenderTarget = nullptr;
 
+	/** Is streaming initialized (deferred until vehicle activation) */
+	bool bIsInitialized = false;
+
 	/** Is streaming active */
 	bool bIsStreaming = false;
 
-	/** Frame capture timer */
-	float FrameCaptureTimer = 0.0f;
+	/** Last absolute capture time (seconds) - decoupled from game tick rate */
+	double LastCaptureTime = 0.0;
 
 	/** Frame capture interval (1.0 / CaptureFrameRate) */
 	float FrameCaptureInterval = 0.033f;
 
 	/** Frame sequence counter */
 	uint64 FrameSequence = 0;
+
+	/** GOP (Group of Pictures) size for keyframe scheduling (overridden by StreamManager config) */
+	int32 GOPSize = 30;  // Default: 1.0s @ 30fps (industry standard)
+
+	/** Scene readiness flag - delays streaming until scene has loaded (prevents black frames) */
+	bool bSceneReady = false;
+
+	/** Prevents repetitive errors for empty CameraID */
+	mutable bool bHasLoggedCameraIDError = false;
 };

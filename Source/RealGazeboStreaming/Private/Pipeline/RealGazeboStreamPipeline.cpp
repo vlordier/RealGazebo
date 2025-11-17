@@ -6,8 +6,7 @@
 
 #include "Pipeline/RealGazeboStreamPipeline.h"
 #include "Pipeline/RealGazeboFramePool.h"
-#include "Core/RealGazeboStreamingLogger.h"
-#include "Core/RealGazeboStreamingSettings.h"
+#include "Core/RealGazeboStreamingTypes.h"
 
 FRealGazeboStreamPipeline::FRealGazeboStreamPipeline(const FStreamKey& InStreamKey,
                                                      const FRealGazeboStreamConfig& InConfig,
@@ -17,12 +16,13 @@ FRealGazeboStreamPipeline::FRealGazeboStreamPipeline(const FStreamKey& InStreamK
 	, FramePool(InFramePool)
 	, CurrentState(EStreamState::Stopped)
 	, FrameSequence(0)
-	, RTSPQueue(URealGazeboStreamingSettings::Get()->MaxQueueSize, FString::Printf(TEXT("%s_RTSP"), *StreamKey.ToString()))
+	, RTSPQueue(InConfig.MaxQueueSize, FString::Printf(TEXT("%s_RTSP"), *StreamKey.ToString()))
 	, LastStatsUpdateTime(0.0)
 	, BackpressureStartTime(0.0)
 	, AdaptiveQualityFactor(1.0f)
 {
-	UE_LOG(LogRealGazeboStreaming, Log, TEXT("Stream pipeline created (hardware-only): %s"), *StreamKey.ToString());
+	UE_LOG(LogRealGazeboStreaming, Log, TEXT("Stream pipeline created (hardware-only, queue size: %d): %s"),
+		InConfig.MaxQueueSize, *StreamKey.ToString());
 }
 
 FRealGazeboStreamPipeline::~FRealGazeboStreamPipeline()
@@ -72,10 +72,9 @@ void FRealGazeboStreamPipeline::Stop()
 	// Clear RTSP queue (hardware-only: encoding queue managed by encoding thread)
 	RTSPQueue.Clear();
 
-	UE_LOG(LogRealGazeboStreaming, Log, TEXT("Stream stopped: %s (Total frames: %llu, Dropped: %llu)"),
+	UE_LOG(LogRealGazeboStreaming, Log, TEXT("Stream stopped: %s (Total frames: %llu)"),
 		*StreamKey.ToString(),
-		Stats.TotalFramesCaptured,
-		Stats.TotalFramesDropped);
+		Stats.TotalFramesEncoded);
 }
 
 void FRealGazeboStreamPipeline::Pause()
@@ -114,7 +113,7 @@ bool FRealGazeboStreamPipeline::SubmitEncodedFrame(TSharedPtr<FEncodedFrameData>
 		return false;
 	}
 
-	const bool bEnqueued = RTSPQueue.Enqueue(Frame, URealGazeboStreamingSettings::Get()->bAllowFrameDropping);
+	const bool bEnqueued = RTSPQueue.Enqueue(Frame, Config.bAllowFrameDropping);
 
 	if (bEnqueued)
 	{
@@ -164,6 +163,16 @@ bool FRealGazeboStreamPipeline::UpdateConfig(const FRealGazeboStreamConfig& NewC
 	Config = NewConfig;
 	UE_LOG(LogRealGazeboStreaming, Log, TEXT("Stream config updated: %s"), *StreamKey.ToString());
 	return true;
+}
+
+void FRealGazeboStreamPipeline::UpdateBitrate(int32 NewBitrateKbps)
+{
+	// Update bitrate in config (can be called while streaming for adaptive adjustment)
+	Config.BitrateKbps = NewBitrateKbps;
+
+	UE_LOG(LogRealGazeboStreaming, Verbose,
+		TEXT("Pipeline: Updated bitrate for stream %s to %d kbps"),
+		*StreamKey.ToString(), NewBitrateKbps);
 }
 
 FStreamingStats FRealGazeboStreamPipeline::GetStats() const
@@ -238,8 +247,9 @@ bool FRealGazeboStreamPipeline::ShouldDropFrame(bool bIsKeyFrame) const
 		return false;
 	}
 
-	// Don't drop if adaptive quality is disabled
-	if (!Config.bEnableAdaptiveQuality)
+	// Ultra-low latency mode: Frame dropping controlled by Config.bAllowFrameDropping
+	// This is set from StreamManager and allows disabling frame dropping entirely
+	if (!Config.bAllowFrameDropping)
 	{
 		return false;
 	}
@@ -265,7 +275,7 @@ bool FRealGazeboStreamPipeline::ShouldDropFrame(bool bIsKeyFrame) const
 
 	const double BackpressureDuration = CurrentTime - BackpressureStartTime;
 
-	// After 1 second of backpressure, start dropping frames
+	// After 1 second of backpressure, start dropping frames for ultra-low latency
 	if (BackpressureDuration > 1.0)
 	{
 		// Drop every other frame when under backpressure

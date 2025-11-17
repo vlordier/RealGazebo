@@ -15,7 +15,7 @@
  *
  * Architecture:
  * - GameInstanceSubsystem for persistence across level changes
- * - 2-thread pipeline: Game Thread to Encoding Thread (Hardware) to RTSP Thread
+ * - 2-thread pipeline: Game Thread -> Encoding Thread (Hardware) -> RTSP Thread
  * - Zero-copy GPU texture encoding with no CPU readback or color conversion
  * - Hardware encoding ONLY: NVENC for NVIDIA GPUs and AMF for AMD GPUs
  * - Direct GPU texture input via CUDA, Vulkan, or DirectX interop
@@ -30,17 +30,22 @@
  * - Software encoders are NOT supported, hardware acceleration is mandatory
  *
  * Integration with RealGazeboBridge:
- * 1. Add URealGazeboStreamingCamera component to vehicle blueprints
- * 2. Vehicle ID is automatically detected from VehicleBasePawn owner
- * 3. Set CameraID property for multi-camera vehicles (e.g., "fpv", "gimbal")
- * 4. Configure global defaults in Project Settings > Plugins > RealGazebo Streaming
- * 5. Streams auto-register when vehicle spawns from PX4-Gazebo
+ * 1. Place ARealGazeboStreamManager actor in level (one per level)
+ * 2. Add URealGazeboStreamingCamera component to vehicle blueprints
+ * 3. Set CameraID property for each camera (REQUIRED) - e.g., "front", "right", "gimbal"
+ * 4. Vehicle ID is automatically detected from VehicleBasePawn owner
+ * 5. Streams auto-register and auto-start when vehicle spawns from PX4-Gazebo
  *
- * RTSP URL Format:
- * - Single camera: rtsp://localhost:8554/<vehicle_type_name>_<vehicle_num>
- * - Multi-camera: rtsp://localhost:8554/<vehicle_type_name>_<vehicle_num>/<camera_id>
- * - Example: rtsp://localhost:8554/X500_0 (first X500 vehicle)
- * - Example: rtsp://localhost:8554/X500_0/fpv (FPV camera on first X500)
+ * RTSP URL Format (CameraID always required):
+ * - Format: rtsp://localhost:8554/<vehicle_type_name>/<camera_id>
+ * - Example: rtsp://localhost:8554/x500_0/front (front camera on first X500)
+ * - Example: rtsp://localhost:8554/x500_0/right (right camera on first X500)
+ * - Example: rtsp://localhost:8554/lc62_2/front (front camera on third LC62)
+ *
+ * Configuration:
+ * - Users configure ONLY via StreamManager Blueprint actor (no console commands or .ini files)
+ * - StreamManager settings: Resolution, Frame Rate, Aspect Ratio
+ * - Auto-computed settings: Bitrate, GOP Size, H.264 Profile (Baseline for ultra-low latency)
  */
 class REALGAZEBOSTREAMING_API FRealGazeboStreamingModule : public IModuleInterface
 {

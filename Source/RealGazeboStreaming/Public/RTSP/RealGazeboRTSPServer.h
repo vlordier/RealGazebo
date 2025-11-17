@@ -45,27 +45,6 @@ struct REALGAZEBOSTREAMING_API FRealGazeboRTSPConfig
 };
 
 /**
- * RTSP Server Statistics
- */
-struct REALGAZEBOSTREAMING_API FRealGazeboRTSPStats
-{
-	/** Number of currently connected clients */
-	int32 ConnectedClients = 0;
-
-	/** Total number of frames sent */
-	int64 TotalFramesSent = 0;
-
-	/** Total bytes sent */
-	int64 TotalBytesSent = 0;
-
-	/** Server uptime in seconds */
-	double UptimeSeconds = 0.0;
-
-	/** Total client sessions served (cumulative) */
-	int32 TotalSessionsServed = 0;
-};
-
-/**
  * RealGazebo RTSP Server
  *
  * Multi-stream RTSP server using Live555 for H.264 video streaming.
@@ -128,18 +107,6 @@ public:
 	void SetSPSPPS(const FStreamKey& StreamKey, const TArray<uint8>& SPS, const TArray<uint8>& PPS);
 
 	/**
-	 * Get RTSP URL for stream
-	 * @param StreamKey Stream to query
-	 * @return RTSP URL (e.g., "rtsp://localhost:8554/iris_0/fpv")
-	 */
-	FString GetStreamURL(const FStreamKey& StreamKey) const;
-
-	/**
-	 * Get server statistics
-	 */
-	FRealGazeboRTSPStats GetStatistics() const;
-
-	/**
 	 * Check if server is running
 	 */
 	bool IsRunning() const { return bIsRunning; }
@@ -157,22 +124,7 @@ private:
 		ServerMediaSession* MediaSession = nullptr;
 		TArray<uint8> SPS;
 		TArray<uint8> PPS;
-		TSharedPtr<TQueue<TSharedPtr<FEncodedFrameData>>> FrameQueue;
-		int64 FramesSent = 0;
-		int64 BytesSent = 0;
-
-		// Default constructor for TMap compatibility
-		FStreamData()
-			: FrameQueue(MakeShared<TQueue<TSharedPtr<FEncodedFrameData>>>())
-		{
-		}
-
-		// Constructor with stream path
-		explicit FStreamData(const FString& InStreamPath)
-			: StreamPath(InStreamPath)
-			, FrameQueue(MakeShared<TQueue<TSharedPtr<FEncodedFrameData>>>())
-		{
-		}
+		// NOTE: Client connection tracking delegated to FRealGazeboH264Source (no local tracking needed)
 	};
 
 	/** Server configuration */
@@ -184,22 +136,19 @@ private:
 	RTSPServer* RtspServer = nullptr;
 	UserAuthenticationDatabase* AuthDatabase = nullptr;
 
-	/** Registered streams */
+	/** Registered streams (active, with SPS/PPS) */
 	TMap<FStreamKey, FStreamData> Streams;
 	mutable FCriticalSection StreamsMutex;
+
+	/** Pending streams (waiting for SPS/PPS before Live555 registration) */
+	TMap<FStreamKey, FStreamData> PendingStreams;
+	mutable FCriticalSection PendingStreamsMutex;
 
 	/** Server thread control */
 	FRunnableThread* ServerThread = nullptr;
 	std::atomic<bool> bIsRunning{false};
-	std::atomic<char> StopRequestedFlag{0};
-
-	/** Statistics */
-	FRealGazeboRTSPStats Statistics;
-	double ServerStartTime = 0.0;
+	std::atomic<char> StopRequestedFlag{0};  // Live555 EventLoopWatchVariable compatibility
 
 	/** Create media session for stream */
 	bool CreateMediaSession(const FStreamKey& StreamKey, FStreamData& StreamData);
-
-	/** Update statistics */
-	void UpdateStatistics();
 };

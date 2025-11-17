@@ -61,16 +61,26 @@ public:
 	static TArray<uint8> GetPPS(const FStreamKey& StreamKey);
 
 	/**
-	 * Clear all cached SPS/PPS data (on shutdown)
+	 * Get estimated bitrate for stream (for RTSP SDP)
+	 * @param StreamKey Stream to query
+	 * @return Estimated bitrate in kbps
 	 */
-	static void ClearAllSPSPPS();
+	static unsigned GetEstimatedBitrate(const FStreamKey& StreamKey);
+
+	/**
+	 * Update cached bitrate for stream (called when config changes)
+	 * @param StreamKey Target stream
+	 * @param BitrateKbps New bitrate in kbps
+	 */
+	static void UpdateBitrate(const FStreamKey& StreamKey, int32 BitrateKbps);
 
 private:
-	// Per-stream SPS/PPS cache
+	// Per-stream SPS/PPS cache with bitrate
 	struct FSPSPPSData
 	{
 		TArray<uint8> SPS;
 		TArray<uint8> PPS;
+		int32 BitrateKbps = 3250;  // Cached bitrate for SDP generation (default: 720p@30fps)
 	};
 
 	// Cached SPS/PPS for all streams

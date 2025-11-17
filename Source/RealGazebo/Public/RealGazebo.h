@@ -14,32 +14,27 @@ DECLARE_LOG_CATEGORY_EXTERN(LogRealGazebo, Log, All);
 
 
 /**
- * RealGazebo Main Module - Master coordinator for multi-heterogeneous unmanned vehicle simulation
+ * RealGazebo Main Module
  *
- * Key Features:
- * - Coordinates RealGazeboBridge and RealGazeboUI modules
- * - Provides unified management system
+ * Purpose:
+ * - Provides unified dependency on RealGazeboBridge, RealGazeboUI, and RealGazeboStreaming
+ * - Simple module with no additional functionality (all logic is in sub-modules)
+ * - Engine automatically loads all modules based on .uplugin file
  */
 class REALGAZEBO_API FRealGazeboModule : public IModuleInterface
 {
 public:
-    /** IModuleInterface implementation */
-    virtual void StartupModule() override;
-    virtual void ShutdownModule() override;
+	/** IModuleInterface implementation */
+	virtual void StartupModule() override;
+	virtual void ShutdownModule() override;
 
-    /** Get the module instance */
-    static FRealGazeboModule& Get();
+	/** Get the module instance */
+	static FRealGazeboModule& Get();
 
-    /** Check if the module is loaded */
-    static bool IsAvailable();
+	/** Check if the module is loaded */
+	static bool IsAvailable();
 
 private:
-    /** Module instance for singleton access */
-    static FRealGazeboModule* ModuleInstance;
-
-    /** Initialize sub-module coordination */
-    void InitializeSubModules();
-
-    /** Shutdown sub-module coordination */
-    void ShutdownSubModules();
+	/** Module instance for singleton access */
+	static FRealGazeboModule* ModuleInstance;
 };

@@ -5,7 +5,7 @@
 // See LICENSE file in the project root for full license information.
 
 #include "Encoding/RealGazeboNVENCEncoder.h"
-#include "Core/RealGazeboStreamingLogger.h"
+#include "Core/RealGazeboStreamingTypes.h"
 #include "VideoEncoderFactory.h"
 #include "CudaModule.h"
 #include "RHI.h"
@@ -15,8 +15,7 @@
 #endif
 
 #if PLATFORM_WINDOWS
-// #include "ID3D12DynamicRHI.h"  // Disabled - using D3D11 only
-#include "ID3D11DynamicRHI.h"
+#include "ID3D11DynamicRHI.h"  // D3D11 only - D3D12 support removed for stability
 #include "D3D11State.h"
 #include "D3D11Resources.h"
 #include "Windows/AllowWindowsPlatformTypes.h"
@@ -92,25 +91,71 @@ bool FRealGazeboNVENCEncoder::Initialize(const FRealGazeboStreamConfig& Config)
 		return false;
 	}
 
-	// Create encoder input for CUDA (NVIDIA path)
-	// Check if CUDA module is loaded
+	// Ultra-low latency mode (B-frames=0, Baseline profile, GOP=1.0s)
+	UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Ultra-low latency mode (B-frames=0, Baseline, GOP=%d)"), Config.GOPSize);
+
+	// Validate resolution (NVENC hardware limits: 32x32 to 4096x4096)
+	if (Config.Dimensions.X > 4096 || Config.Dimensions.Y > 4096 ||
+	    Config.Dimensions.X < 32 || Config.Dimensions.Y < 32)
+	{
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Resolution %dx%d outside valid range (32x32 to 4096x4096)"),
+			Config.Dimensions.X, Config.Dimensions.Y);
+		return false;
+	}
+
+	// Warn if not 16-pixel aligned (suboptimal encoding efficiency)
+	if (Config.Dimensions.X % 16 != 0 || Config.Dimensions.Y % 16 != 0)
+	{
+		UE_LOG(LogRealGazeboStreaming, Warning, TEXT("NVENCEncoder: Resolution %dx%d not 16-aligned (may reduce efficiency)"),
+			Config.Dimensions.X, Config.Dimensions.Y);
+	}
+
+	// Validate bitrate (600-8000 kbps for RTSP/RTP streaming)
+	if (Config.BitrateKbps < 600 || Config.BitrateKbps > 8000)
+	{
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Bitrate %d kbps outside range (600-8000)"),
+			Config.BitrateKbps);
+		return false;
+	}
+
+	// Validate GOP (30-60 frames = 1.0s @ 30/60 FPS)
+	if (Config.GOPSize < 30 || Config.GOPSize > 60)
+	{
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: GOP %d outside range (30-60)"), Config.GOPSize);
+		return false;
+	}
+
+	// Set NVENC keyframe interval to match GOP (prevents decoder errors)
+	// Default NVENC = 300 frames causes "decode_slice_header error" due to DPB overflow
+	IConsoleVariable* CVarKeyframeInterval = IConsoleManager::Get().FindConsoleVariable(TEXT("NVENC.KeyframeInterval"));
+	if (CVarKeyframeInterval)
+	{
+		CVarKeyframeInterval->Set(Config.GOPSize);
+		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Keyframe interval set to %d"), Config.GOPSize);
+	}
+	else
+	{
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to set keyframe interval (may cause decoder errors)"));
+	}
+
+	// Create CUDA encoder input (required for NVENC)
 	if (!FModuleManager::Get().IsModuleLoaded("CUDA"))
 	{
-		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: CUDA module is not loaded"));
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: CUDA module not loaded"));
 		return false;
 	}
 
 	CUcontext CudaContext = FModuleManager::GetModuleChecked<FCUDAModule>("CUDA").GetCudaContext();
 	if (!CudaContext)
 	{
-		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to get CUDA context"));
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: No CUDA context"));
 		return false;
 	}
 
 	EncoderInput = AVEncoder::FVideoEncoderInput::CreateForCUDA(CudaContext, false);
 	if (!EncoderInput.IsValid())
 	{
-		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to create CUDA encoder input"));
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to create input"));
 		return false;
 	}
 
@@ -118,11 +163,17 @@ bool FRealGazeboNVENCEncoder::Initialize(const FRealGazeboStreamConfig& Config)
 	AVEncoder::FVideoEncoder::FLayerConfig LayerConfig;
 	LayerConfig.Width = Config.Dimensions.X;
 	LayerConfig.Height = Config.Dimensions.Y;
+
 	LayerConfig.MaxFramerate = Config.FPSValue;
-	LayerConfig.TargetBitrate = Config.BitrateKbps * 1000; // Convert to bps
-	LayerConfig.MaxBitrate = Config.BitrateKbps * 1000 * 2; // Allow up to 2x for peaks
-	LayerConfig.H264Profile = GetH264Profile();
-	LayerConfig.RateControlMode = AVEncoder::FVideoEncoder::RateControlMode::CBR;
+
+	// Bitrate config (VBR for quality, clamped to 8 Mbps max)
+	LayerConfig.TargetBitrate = Config.BitrateKbps * 1000;
+	constexpr int32 MAX_BITRATE_BPS = 8000 * 1000;  // 8 Mbps ceiling
+	LayerConfig.MaxBitrate = FMath::Min(Config.BitrateKbps * 2000, MAX_BITRATE_BPS);
+	LayerConfig.RateControlMode = AVEncoder::FVideoEncoder::RateControlMode::VBR;
+
+	// Baseline profile for maximum RTSP/RTP compatibility
+	LayerConfig.H264Profile = AVEncoder::FVideoEncoder::H264Profile::BASELINE;
 
 	// Create video encoder
 	VideoEncoder = EncoderFactory.Create(EncoderID, EncoderInput, LayerConfig);
@@ -139,28 +190,23 @@ bool FRealGazeboNVENCEncoder::Initialize(const FRealGazeboStreamConfig& Config)
 		OnEncodedPacket(LayerIndex, Frame, Packet);
 	});
 
-	// Determine encoder input type based on RHI
+	// Detect RHI type (Vulkan or D3D11 only)
 	const ERHIInterfaceType RHIType = RHIGetInterfaceType();
 	if (RHIType == ERHIInterfaceType::Vulkan)
 	{
-		EncoderInputType = EEncoderInputType::CUDA; // Vulkan -> CUDA
-		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Using Vulkan -> CUDA path"));
+		EncoderInputType = EEncoderInputType::CUDA;
+		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Vulkan -> CUDA"));
 	}
 #if PLATFORM_WINDOWS
 	else if (RHIType == ERHIInterfaceType::D3D11)
 	{
-		EncoderInputType = EEncoderInputType::D3D11; // D3D11 direct
-		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Using D3D11 -> CUDA path"));
-	}
-	else if (RHIType == ERHIInterfaceType::D3D12)
-	{
-		EncoderInputType = EEncoderInputType::CUDA; // D3D12 -> CUDA
-		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Using D3D12 -> CUDA path"));
+		EncoderInputType = EEncoderInputType::D3D11;
+		UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: D3D11 -> CUDA"));
 	}
 #endif
 	else
 	{
-		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Unsupported RHI type"));
+		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Unsupported RHI (need Vulkan or D3D11)"));
 		return false;
 	}
 
@@ -176,41 +222,36 @@ void FRealGazeboNVENCEncoder::Shutdown()
 		return;
 	}
 
-	UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Shutting down (Total frames encoded: %d)..."), FrameCounter);
+	UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Shutting down (%d frames)"), FrameCounter);
+	bIsInitialized = false;
 
-	// CRITICAL: Flush encoder to process all pending frames before shutdown
-	// This ensures all OnFrameEncoded callbacks fire and frames are properly released
-	// Without flushing, ActiveFrames will still contain unreleased frames when
-	// EncoderInput is destroyed, causing assertion failures
+	// Shutdown sequence (prevents buffer crash):
+	// 1. Clear callback, 2. Flush input, 3. Destroy encoder, 4. Destroy input
 	if (VideoEncoder.IsValid())
 	{
-		UE_LOG(LogRealGazeboStreaming, Verbose, TEXT("NVENCEncoder: Flushing pending frames..."));
-
-		// Call VideoEncoder->Shutdown() which internally flushes the encoder
-		// This will block until all pending frames are encoded and callbacks are fired
-		VideoEncoder->Shutdown();
-
-		// Now safe to clear callbacks and reset encoder
 		VideoEncoder->ClearOnEncodedPacket();
-		VideoEncoder.Reset();
-
-		UE_LOG(LogRealGazeboStreaming, Verbose, TEXT("NVENCEncoder: Encoder shut down and flushed"));
 	}
 
-	// Now safe to release encoder input (all frames should be released by callbacks)
 	if (EncoderInput.IsValid())
 	{
-		// Flush any remaining frames in the input pool
-		EncoderInput->Flush();
+		EncoderInput->Flush();  // Release pending frames before encoder shutdown
+	}
+
+	if (VideoEncoder.IsValid())
+	{
+		VideoEncoder->Shutdown();
+		VideoEncoder.Reset();
+	}
+
+	if (EncoderInput.IsValid())
+	{
 		EncoderInput.Reset();
 	}
 
-	bIsInitialized = false;
-
-	UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Shut down successfully"));
+	UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: Shutdown complete"));
 }
 
-bool FRealGazeboNVENCEncoder::EncodeTextureFrame(FTexture2DRHIRef SourceTexture, TSharedPtr<FEncodedFrameData> OutEncodedFrame, double Timestamp)
+bool FRealGazeboNVENCEncoder::EncodeTextureFrame(FTexture2DRHIRef SourceTexture, TSharedPtr<FEncodedFrameData> OutEncodedFrame, int64 TimestampUs)
 {
 	if (!bIsInitialized || !VideoEncoder.IsValid() || !SourceTexture.IsValid() || !OutEncodedFrame.IsValid())
 	{
@@ -243,8 +284,7 @@ bool FRealGazeboNVENCEncoder::EncodeTextureFrame(FTexture2DRHIRef SourceTexture,
 	// D3D12 support removed - using D3D11 only
 	if (RHIType == ERHIInterfaceType::D3D11)
 	{
-		// D3D11: Pass texture directly (no CUDA conversion needed for now)
-		// TODO: Implement D3D11 -> CUDA path if needed
+		// D3D11: Pass texture directly to NVENC encoder
 		ID3D11Texture2D* D3D11Texture = static_cast<ID3D11Texture2D*>(SourceTexture->GetNativeResource());
 		InputFrame->SetTexture(D3D11Texture, [](ID3D11Texture2D* NativeTexture) { /* Released by RHI */ });
 	}
@@ -257,7 +297,7 @@ bool FRealGazeboNVENCEncoder::EncodeTextureFrame(FTexture2DRHIRef SourceTexture,
 
 	// Set frame metadata
 	const bool bForceKeyFrame = bRequestKeyFrame.load() || (FrameCounter % StreamConfig.GOPSize) == 0;
-	InputFrame->SetTimestampUs(static_cast<int64>(Timestamp * 1000000));
+	InputFrame->SetTimestampUs(TimestampUs);
 	InputFrame->SetFrameID(FrameCounter);
 
 	// Clear previous encoded data
@@ -271,16 +311,9 @@ bool FRealGazeboNVENCEncoder::EncodeTextureFrame(FTexture2DRHIRef SourceTexture,
 	AVEncoder::FVideoEncoder::FEncodeOptions EncodeOptions;
 	EncodeOptions.bForceKeyFrame = bForceKeyFrame;
 
-	// CRITICAL: Set callback to release frame after encoding completes
-	// Without this, frames accumulate in ActiveFrames and cause shutdown assertion failures
-	EncodeOptions.OnFrameEncoded = [](const TSharedPtr<AVEncoder::FVideoEncoderInputFrame> CompletedFrame)
-	{
-		if (CompletedFrame.IsValid())
-		{
-			// Release frame back to pool (removes from ActiveFrames tracking)
-			CompletedFrame->Release();
-		}
-	};
+	// NOTE: Frame release is handled in OnEncodedPacket() callback (not here)
+	// The SetOnEncodedPacket() callback (set during Initialize()) receives the Frame parameter
+	// and calls Frame->Release() to decrement ActiveFrames count
 
 	VideoEncoder->Encode(InputFrame, EncodeOptions);
 
@@ -306,11 +339,11 @@ bool FRealGazeboNVENCEncoder::EncodeTextureFrame(FTexture2DRHIRef SourceTexture,
 		// Copy encoded data
 		OutEncodedFrame->EncodedData = LatestEncodedData;
 		OutEncodedFrame->Dimensions = FIntPoint(SourceTexture->GetSizeX(), SourceTexture->GetSizeY());
-		OutEncodedFrame->CaptureTimestamp = Timestamp;
+		OutEncodedFrame->CaptureTimestampUs = TimestampUs;
 		OutEncodedFrame->FrameNumber = FrameCounter;
 		OutEncodedFrame->bIsKeyFrame = bForceKeyFrame;
-		OutEncodedFrame->PresentationTimeUs = static_cast<int64>(Timestamp * 1000000);
-		OutEncodedFrame->EncodingTimestamp = FPlatformTime::Seconds();
+		OutEncodedFrame->PresentationTimeUs = TimestampUs;
+		OutEncodedFrame->EncodingTimestampUs = RealGazeboStreamingTime::GetTimeMicroseconds();
 	}
 
 	bRequestKeyFrame.store(false);
@@ -334,13 +367,13 @@ void FRealGazeboNVENCEncoder::UpdateBitrate(int32 NewBitrateKbps)
 
 	StreamConfig.BitrateKbps = NewBitrateKbps;
 
-	// Update encoder layer config
 	AVEncoder::FVideoEncoder::FLayerConfig LayerConfig = VideoEncoder->GetLayerConfig(0);
 	LayerConfig.TargetBitrate = NewBitrateKbps * 1000;
-	LayerConfig.MaxBitrate = NewBitrateKbps * 1000 * 2;
+	constexpr int32 MAX_BITRATE_BPS = 8000 * 1000;
+	LayerConfig.MaxBitrate = FMath::Min(NewBitrateKbps * 2000, MAX_BITRATE_BPS);
 	VideoEncoder->UpdateLayerConfig(0, LayerConfig);
 
-	UE_LOG(LogRealGazeboStreaming, Verbose, TEXT("NVENCEncoder: Bitrate updated to %d kbps"), NewBitrateKbps);
+	UE_LOG(LogRealGazeboStreaming, Verbose, TEXT("NVENCEncoder: Bitrate = %d kbps"), NewBitrateKbps);
 }
 
 bool FRealGazeboNVENCEncoder::GetSPS(TArray<uint8>& OutSPS)
@@ -367,70 +400,81 @@ bool FRealGazeboNVENCEncoder::GetPPS(TArray<uint8>& OutPPS)
 
 bool FRealGazeboNVENCEncoder::IsAvailable()
 {
-	// Check if AVEncoder factory is available
+	// Fix for PIE encoder registry wipe: Reload EncoderNVENC module if empty but NVIDIA GPU present
 	AVEncoder::FVideoEncoderFactory& EncoderFactory = AVEncoder::FVideoEncoderFactory::Get();
+
 	if (!EncoderFactory.IsSetup())
 	{
 		return false;
 	}
 
-	// Check if H.264 encoder is available
+	const TArray<AVEncoder::FVideoEncoderInfo>& AvailableEncoders = EncoderFactory.GetAvailable();
+
+	// If registry empty but NVIDIA GPU present, reload module
+	if (AvailableEncoders.Num() == 0)
+	{
+		const FString AdapterNameLower = GRHIAdapterName.ToLower();
+		bool bIsNVIDIA = AdapterNameLower.Contains(TEXT("nvidia")) ||
+		                 AdapterNameLower.Contains(TEXT("geforce")) ||
+		                 AdapterNameLower.Contains(TEXT("quadro")) ||
+		                 AdapterNameLower.Contains(TEXT("tesla"));
+
+		if (bIsNVIDIA)
+		{
+			FModuleManager& ModuleManager = FModuleManager::Get();
+			if (ModuleManager.IsModuleLoaded("EncoderNVENC"))
+			{
+				ModuleManager.UnloadModule("EncoderNVENC");
+			}
+
+			if (!ModuleManager.LoadModule("EncoderNVENC"))
+			{
+				UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to reload module"));
+				return false;
+			}
+		}
+		else
+		{
+			return false;
+		}
+	}
+
 	return EncoderFactory.HasEncoderForCodec(AVEncoder::ECodecType::H264);
 }
 
 bool FRealGazeboNVENCEncoder::IsRHIDeviceNVIDIA() const
 {
-	// Check GPU adapter name (not RHI type!)
-	// GDynamicRHI->GetName() returns "Vulkan" or "D3D11", not GPU vendor
-	// GRHIAdapterName contains actual GPU name like "NVIDIA GeForce RTX 3080"
-	const FString AdapterName = GRHIAdapterName;
-	const FString AdapterNameLower = AdapterName.ToLower();
-
+	const FString AdapterNameLower = GRHIAdapterName.ToLower();
 	return AdapterNameLower.Contains(TEXT("nvidia")) ||
 	       AdapterNameLower.Contains(TEXT("geforce")) ||
 	       AdapterNameLower.Contains(TEXT("quadro")) ||
 	       AdapterNameLower.Contains(TEXT("tesla"));
 }
 
-bool FRealGazeboNVENCEncoder::IsRHIDeviceAMD() const
-{
-	// Check GPU adapter name (not RHI type!)
-	const FString AdapterName = GRHIAdapterName;
-	const FString AdapterNameLower = AdapterName.ToLower();
-
-	return AdapterNameLower.Contains(TEXT("amd")) ||
-	       AdapterNameLower.Contains(TEXT("radeon")) ||
-	       AdapterNameLower.Contains(TEXT("ati"));
-}
-
 AVEncoder::FVideoEncoder::H264Profile FRealGazeboNVENCEncoder::GetH264Profile() const
 {
-	switch (StreamConfig.EncodingProfile)
-	{
-	case EH264Profile::Baseline:
-		return AVEncoder::FVideoEncoder::H264Profile::BASELINE;
-	case EH264Profile::Main:
-		return AVEncoder::FVideoEncoder::H264Profile::MAIN;
-	case EH264Profile::High:
-		return AVEncoder::FVideoEncoder::H264Profile::HIGH;
-	default:
-		return AVEncoder::FVideoEncoder::H264Profile::MAIN;
-	}
+	return AVEncoder::FVideoEncoder::H264Profile::BASELINE;
 }
 
 void FRealGazeboNVENCEncoder::OnEncodedPacket(uint32 LayerIndex, const TSharedPtr<AVEncoder::FVideoEncoderInputFrame> Frame,
                                                const AVEncoder::FCodecPacket& Packet)
 {
+	// Release frame (prevents ActiveFrames assertion on shutdown)
+	if (Frame.IsValid())
+	{
+		Frame->Release();
+	}
+
 	FScopeLock Lock(&EncodedDataMutex);
 
-	// Store encoded data from the packet
-	if (Packet.Data.IsValid() && Packet.DataSize > 0)
+	// Validate packet data before memcpy
+	if (Packet.Data.IsValid() && Packet.DataSize > 0 && Packet.Data.Get() != nullptr)
 	{
 		LatestEncodedData.SetNum(Packet.DataSize);
 		FMemory::Memcpy(LatestEncodedData.GetData(), Packet.Data.Get(), Packet.DataSize);
 		bHasEncodedData = true;
 
-		// Extract SPS/PPS from keyframes if not yet cached
+		// Extract SPS/PPS from first keyframe
 		if (Packet.IsKeyFrame && !bHasSPSPPS)
 		{
 			ParseAndCacheSPSPPS(Packet.Data.Get(), Packet.DataSize);
@@ -438,16 +482,13 @@ void FRealGazeboNVENCEncoder::OnEncodedPacket(uint32 LayerIndex, const TSharedPt
 	}
 	else
 	{
-		UE_LOG(LogRealGazeboStreaming, Warning, TEXT("NVENCEncoder: Received empty packet"));
+		UE_LOG(LogRealGazeboStreaming, Warning, TEXT("NVENCEncoder: Invalid packet (size: %d)"), Packet.DataSize);
 	}
 }
 
 void FRealGazeboNVENCEncoder::ParseAndCacheSPSPPS(const uint8* Data, int32 Size)
 {
-	// Parse H.264 Annex-B stream for SPS/PPS NAL units
-	// NAL unit format: 00 00 00 01 [NAL type + data] 00 00 00 01 [next NAL]
-	// SPS NAL type: 0x67 (type 7)
-	// PPS NAL type: 0x68 (type 8)
+	// Parse Annex-B stream: SPS=0x67 (type 7), PPS=0x68 (type 8)
 
 	int32 Offset = 0;
 	while (Offset + 4 < Size)
@@ -493,7 +534,8 @@ void FRealGazeboNVENCEncoder::ParseAndCacheSPSPPS(const uint8* Data, int32 Size)
 			if (CachedSPS.Num() > 0 && CachedPPS.Num() > 0)
 			{
 				bHasSPSPPS = true;
-				UE_LOG(LogRealGazeboStreaming, Log, TEXT("NVENCEncoder: SPS/PPS cached successfully"));
+				UE_LOG(LogRealGazeboStreaming, Warning, TEXT("NVENCEncoder: *** SPS/PPS CACHED SUCCESSFULLY *** (SPS: %d bytes, PPS: %d bytes)"),
+					CachedSPS.Num(), CachedPPS.Num());
 				return;
 			}
 
@@ -633,101 +675,3 @@ void FRealGazeboNVENCEncoder::SetTextureCUDAVulkan(TSharedPtr<AVEncoder::FVideoE
 	});
 }
 #endif
-
-#if PLATFORM_WINDOWS
-// D3D12 support disabled - using D3D11 only
-#if 0
-void FRealGazeboNVENCEncoder::SetTextureCUDAD3D12(TSharedPtr<AVEncoder::FVideoEncoderInputFrame> InputFrame, FTexture2DRHIRef Texture)
-{
-	ID3D12Resource* NativeD3D12Resource = GetID3D12DynamicRHI()->RHIGetResource(Texture);
-	const int64 TextureMemorySize = GetID3D12DynamicRHI()->RHIGetResourceMemorySize(Texture);
-
-	check(!GetID3D12DynamicRHI()->RHIIsResourcePlaced(Texture));
-
-	TRefCountPtr<ID3D12Device> OwnerDevice;
-	HRESULT QueryResult;
-	if ((QueryResult = NativeD3D12Resource->GetDevice(IID_PPV_ARGS(OwnerDevice.GetInitReference()))) != S_OK)
-	{
-		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to get D3D12 device (error: %d)"), QueryResult);
-		return;
-	}
-
-	HANDLE D3D12TextureHandle;
-	if ((QueryResult = OwnerDevice->CreateSharedHandle(NativeD3D12Resource, NULL, GENERIC_ALL, NULL, &D3D12TextureHandle)) != S_OK)
-	{
-		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to get D3D12 texture handle (error: %d)"), QueryResult);
-		return;
-	}
-
-	FCUDAModule::CUDA().cuCtxPushCurrent(FModuleManager::GetModuleChecked<FCUDAModule>("CUDA").GetCudaContext());
-
-	CUexternalMemory MappedExternalMemory = nullptr;
-
-	{
-		CUDA_EXTERNAL_MEMORY_HANDLE_DESC CudaExtMemHandleDesc = {};
-		CudaExtMemHandleDesc.type = CU_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE;
-		CudaExtMemHandleDesc.handle.win32.name = NULL;
-		CudaExtMemHandleDesc.handle.win32.handle = D3D12TextureHandle;
-		CudaExtMemHandleDesc.size = TextureMemorySize;
-		CudaExtMemHandleDesc.flags |= CUDA_EXTERNAL_MEMORY_DEDICATED;
-
-		CUresult Result = FCUDAModule::CUDA().cuImportExternalMemory(&MappedExternalMemory, &CudaExtMemHandleDesc);
-		if (Result != CUDA_SUCCESS)
-		{
-			UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to import external memory from D3D12 (error: %d)"), Result);
-		}
-	}
-
-	CUmipmappedArray MappedMipArray = nullptr;
-	CUarray MappedArray = nullptr;
-
-	{
-		CUDA_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC MipmapDesc = {};
-		MipmapDesc.numLevels = 1;
-		MipmapDesc.offset = 0;
-		MipmapDesc.arrayDesc.Width = Texture->GetSizeX();
-		MipmapDesc.arrayDesc.Height = Texture->GetSizeY();
-		MipmapDesc.arrayDesc.Depth = 1;
-		MipmapDesc.arrayDesc.NumChannels = 4;
-		MipmapDesc.arrayDesc.Format = CU_AD_FORMAT_UNSIGNED_INT8;
-		MipmapDesc.arrayDesc.Flags = CUDA_ARRAY3D_SURFACE_LDST | CUDA_ARRAY3D_COLOR_ATTACHMENT;
-
-		CUresult Result = FCUDAModule::CUDA().cuExternalMemoryGetMappedMipmappedArray(&MappedMipArray, MappedExternalMemory, &MipmapDesc);
-		if (Result != CUDA_SUCCESS)
-		{
-			UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to bind mipmappedArray (error: %d)"), Result);
-		}
-	}
-
-	CUresult MipMapArrGetLevelErr = FCUDAModule::CUDA().cuMipmappedArrayGetLevel(&MappedArray, MappedMipArray, 0);
-	if (MipMapArrGetLevelErr != CUDA_SUCCESS)
-	{
-		UE_LOG(LogRealGazeboStreaming, Error, TEXT("NVENCEncoder: Failed to bind to mip 0"));
-	}
-
-	FCUDAModule::CUDA().cuCtxPopCurrent(NULL);
-
-	InputFrame->SetTexture(MappedArray, AVEncoder::FVideoEncoderInputFrame::EUnderlyingRHI::D3D12, D3D12TextureHandle,
-		[MappedArray, MappedMipArray, MappedExternalMemory](CUarray NativeTexture) {
-		FCUDAModule::CUDA().cuCtxPushCurrent(FModuleManager::GetModuleChecked<FCUDAModule>("CUDA").GetCudaContext());
-
-		if (MappedArray)
-		{
-			FCUDAModule::CUDA().cuArrayDestroy(MappedArray);
-		}
-
-		if (MappedMipArray)
-		{
-			FCUDAModule::CUDA().cuMipmappedArrayDestroy(MappedMipArray);
-		}
-
-		if (MappedExternalMemory)
-		{
-			FCUDAModule::CUDA().cuDestroyExternalMemory(MappedExternalMemory);
-		}
-
-		FCUDAModule::CUDA().cuCtxPopCurrent(NULL);
-	});
-}
-#endif // #if 0 - D3D12 disabled
-#endif // PLATFORM_WINDOWS

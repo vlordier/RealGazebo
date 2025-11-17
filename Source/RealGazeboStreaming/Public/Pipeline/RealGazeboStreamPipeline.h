@@ -8,7 +8,6 @@
 
 #include "CoreMinimal.h"
 #include "Core/RealGazeboStreamingTypes.h"
-#include "Core/RealGazeboStreamConfig.h"
 #include "Utils/RealGazeboStreamingStats.h"
 #include "Pipeline/RealGazeboFrameData.h"
 #include "Pipeline/RealGazeboStreamQueue.h"
@@ -90,6 +89,9 @@ public:
 
 	/** Update configuration (must be stopped) */
 	bool UpdateConfig(const FRealGazeboStreamConfig& NewConfig);
+
+	/** Update bitrate only (can be called while streaming for adaptive bitrate) */
+	void UpdateBitrate(int32 NewBitrateKbps);
 
 	// ========================================
 	// Statistics

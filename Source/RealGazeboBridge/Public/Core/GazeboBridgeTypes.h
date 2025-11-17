@@ -62,6 +62,7 @@ struct REALGAZEBOBRIDGE_API FVehicleID
         return !(*this == Other);
     }
 
+    
     friend uint32 GetTypeHash(const FVehicleID& VehicleID)
     {
         return HashCombine(GetTypeHash(VehicleID.VehicleNum), GetTypeHash(VehicleID.VehicleType));

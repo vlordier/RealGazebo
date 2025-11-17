@@ -38,7 +38,6 @@ namespace AVEncoder
  *
  * Platform Support:
  * - Linux + Vulkan: Direct Vulkan texture input (VkImage)
- * - Windows + D3D12: Direct D3D12 texture input (ID3D12Resource)
  * - Windows + D3D11: Direct D3D11 texture input (ID3D11Texture2D)
  *
  * Features:
@@ -59,7 +58,7 @@ public:
 	//~ Begin IRealGazeboHardwareEncoder Interface
 	virtual bool Initialize(const FRealGazeboStreamConfig& Config) override;
 	virtual void Shutdown() override;
-	virtual bool EncodeTextureFrame(FTexture2DRHIRef SourceTexture, TSharedPtr<FEncodedFrameData> OutEncodedFrame, double Timestamp) override;
+	virtual bool EncodeTextureFrame(FTexture2DRHIRef SourceTexture, TSharedPtr<FEncodedFrameData> OutEncodedFrame, int64 TimestampUs) override;
 	virtual void RequestKeyFrame() override;
 	virtual void UpdateBitrate(int32 NewBitrateKbps) override;
 	virtual FString GetEncoderName() const override { return TEXT("AMF"); }
@@ -80,8 +79,7 @@ private:
 	enum class EEncoderInputType : uint8
 	{
 		Vulkan,    // Vulkan image (Linux)
-		D3D11,     // D3D11 texture (Windows)
-		D3D12      // D3D12 texture (Windows)
+		D3D11      // D3D11 texture (Windows)
 	};
 
 	/** AVEncoder instance */
@@ -119,11 +117,6 @@ private:
 	 * Check if current RHI device is AMD
 	 */
 	bool IsRHIDeviceAMD() const;
-
-	/**
-	 * Check if current RHI device is NVIDIA
-	 */
-	bool IsRHIDeviceNVIDIA() const;
 
 	/**
 	 * Callback for encoded packets from AVEncoder

@@ -65,7 +65,9 @@ public class RealGazeboStreaming : ModuleRules
 		{
 			PrivateDependencyModuleNames.AddRange(new string[]
 			{
-				"D3D11RHI"     // DirectX 11 RHI (Windows) - sufficient for NVENC/AMF hardware encoding
+				"D3D11RHI"     // DirectX 11 RHI is sufficient for NVENC and AMF hardware encoding on Windows
+				               // Important: D3D12RHI should not be added here as it is already included
+				               // in the AVEncoder module (lines 41-42). Adding it here will cause module conflicts.
 			});
 
 			PublicDefinitions.Add("REALGAZEBO_PLATFORM_WINDOWS=1");

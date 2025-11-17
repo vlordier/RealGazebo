@@ -20,6 +20,7 @@
 // Forward declarations
 class IRealGazeboHardwareEncoder;
 class FRealGazeboRTSPThread;
+class FRealGazeboRTSPServer;
 
 // FTextureFrameData is defined in Pipeline/RealGazeboFrameData.h
 
@@ -49,9 +50,11 @@ public:
 	 * Constructor
 	 * @param InFramePool Shared frame pool for memory management
 	 * @param InRTSPThread RTSP thread for encoded frame delivery
+	 * @param InRTSPServer RTSP server for SPS/PPS configuration
 	 */
 	FRealGazeboEncodingThread(TSharedPtr<FRealGazeboFramePool> InFramePool,
-	                          TSharedPtr<FRealGazeboRTSPThread> InRTSPThread);
+	                          TSharedPtr<FRealGazeboRTSPThread> InRTSPThread,
+	                          TSharedPtr<FRealGazeboRTSPServer> InRTSPServer);
 	virtual ~FRealGazeboEncodingThread();
 
 	//~ Begin FRunnable Interface
@@ -76,9 +79,10 @@ public:
 	 * Register encoder for stream
 	 * @param StreamKey Stream identifier
 	 * @param Encoder Hardware encoder instance
+	 * @param BitrateKbps Encoder bitrate in kbps (for RTSP SDP)
 	 * @return True if registered successfully
 	 */
-	bool RegisterEncoder(const FStreamKey& StreamKey, TSharedPtr<IRealGazeboHardwareEncoder> Encoder);
+	bool RegisterEncoder(const FStreamKey& StreamKey, TSharedPtr<IRealGazeboHardwareEncoder> Encoder, int32 BitrateKbps);
 
 	/**
 	 * Unregister encoder for stream
@@ -95,7 +99,7 @@ public:
 	 * @return True if enqueued successfully
 	 */
 	bool EnqueueTextureFrame(const FStreamKey& StreamKey, FTexture2DRHIRef Texture,
-	                         double Timestamp, uint64 FrameNumber);
+	                         int64 TimestampUs, uint64 FrameNumber);
 
 	/**
 	 * Request keyframe for next encode
@@ -144,8 +148,10 @@ private:
 
 		std::atomic<bool> bRequestKeyFrame{false};
 		std::atomic<bool> bSupportsTextureEncoding{false};
+		std::atomic<bool> bSPSPPSSet{false};  // Track if SPS/PPS has been set for this stream
 		std::atomic<int64> FramesEncoded{0};
 		std::atomic<int64> FramesDropped{0};
+		std::atomic<int32> BitrateKbps{3250};  // Cached bitrate for RTSP SDP (default: 720p@30fps)
 
 		// Thread-safe statistics with mutex protection
 		mutable FCriticalSection StatsMutex;
@@ -159,6 +165,9 @@ private:
 	/** RTSP thread for output */
 	TSharedPtr<FRealGazeboRTSPThread> RTSPThread;
 
+	/** RTSP server for SPS/PPS configuration */
+	TSharedPtr<FRealGazeboRTSPServer> RTSPServer;
+
 	/** Per-stream encoders */
 	TMap<FStreamKey, TSharedPtr<FStreamEncoder>> StreamEncoders;
 	mutable FCriticalSection EncoderMapMutex;
@@ -169,7 +178,7 @@ private:
 	std::atomic<bool> bStopRequested{false};
 
 	/** Internal methods */
-	void ProcessEncodingQueues();
+	int32 ProcessEncodingQueues();  // Returns number of frames processed
 	int32 ProcessStreamEncoder(const FStreamKey& StreamKey, FStreamEncoder& StreamEncoder);
 
 	// Hardware texture encoding

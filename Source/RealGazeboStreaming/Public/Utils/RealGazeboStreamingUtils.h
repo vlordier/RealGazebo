@@ -10,29 +10,20 @@
 #include "Core/RealGazeboStreamingTypes.h"
 
 /**
- * Utility functions for streaming configuration
+ * Streaming utilities for resolution and encoding calculations
  */
 class REALGAZEBOSTREAMING_API FRealGazeboStreamingUtils
 {
 public:
-	/** Get resolution dimensions from enum */
+	/** Get pixel dimensions for resolution enum */
 	static FIntPoint GetResolutionDimensions(EStreamResolution Resolution);
 
-	/** Calculate bitrate in kbps based on resolution and quality */
-	static int32 CalculateBitrate(EStreamResolution Resolution, EStreamQuality Quality);
+	/** Calculate optimal bitrate for resolution and frame rate (frame rate aware CBR) */
+	static int32 CalculateBitrateUltraLowLatency(EStreamResolution Resolution, EStreamFrameRate FrameRate);
 
-	/** Get FPS value from enum */
+	/** Convert frame rate enum to FPS value */
 	static int32 GetFrameRateValue(EStreamFrameRate FrameRate);
 
-	/** Get resolutions for a specific aspect ratio */
-	static TArray<EStreamResolution> GetResolutionsForAspectRatio(EStreamAspectRatio AspectRatio);
-
-	/** Check if resolution matches aspect ratio */
-	static bool IsResolutionCompatibleWithAspectRatio(EStreamResolution Resolution, EStreamAspectRatio AspectRatio);
-
-	/** Convert H.264 profile enum to string */
-	static FString H264ProfileToString(EH264Profile Profile);
-
-	/** Get H.264 profile level */
-	static int32 GetH264ProfileLevel(EH264Profile Profile);
+	/** Calculate GOP size for frame rate (1.0s keyframe interval - industry standard) */
+	static int32 CalculateGOPSize(EStreamFrameRate FrameRate);
 };

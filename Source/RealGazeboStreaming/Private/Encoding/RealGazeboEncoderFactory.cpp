@@ -7,8 +7,7 @@
 #include "Encoding/RealGazeboEncoderFactory.h"
 #include "Encoding/RealGazeboNVENCEncoder.h"
 #include "Encoding/RealGazeboAMFEncoder.h"
-#include "Core/RealGazeboStreamingLogger.h"
-#include "Core/RealGazeboStreamingSettings.h"
+#include "Core/RealGazeboStreamingTypes.h"
 #include "RHI.h"
 #include "RHIDefinitions.h"
 
@@ -18,8 +17,6 @@ bool FRealGazeboEncoderFactory::bVendorDetected = false;
 
 TSharedPtr<IRealGazeboHardwareEncoder> FRealGazeboEncoderFactory::CreateEncoder(const FRealGazeboStreamConfig& Config)
 {
-	const URealGazeboStreamingSettings* Settings = GetDefault<URealGazeboStreamingSettings>();
-
 	UE_LOG(LogRealGazeboStreaming, Log, TEXT("EncoderFactory: Creating encoder (%dx%d @ %d kbps)"),
 		Config.Dimensions.X, Config.Dimensions.Y, Config.BitrateKbps);
 
@@ -40,7 +37,7 @@ TSharedPtr<IRealGazeboHardwareEncoder> FRealGazeboEncoderFactory::CreateEncoder(
 	TSharedPtr<IRealGazeboHardwareEncoder> Encoder;
 
 	// NVIDIA: Try NVENC with CUDA interop
-	if (CachedGPUVendor == EGPUVendor::NVIDIA && !Settings->bForceAMF)
+	if (CachedGPUVendor == EGPUVendor::NVIDIA)
 	{
 		Encoder = TryCreateNVENC(Config);
 		if (Encoder.IsValid())
@@ -54,7 +51,7 @@ TSharedPtr<IRealGazeboHardwareEncoder> FRealGazeboEncoderFactory::CreateEncoder(
 	}
 
 	// AMD: Try AMF with native RHI
-	if (CachedGPUVendor == EGPUVendor::AMD && !Settings->bForceNVENC)
+	if (CachedGPUVendor == EGPUVendor::AMD)
 	{
 		Encoder = TryCreateAMF(Config);
 		if (Encoder.IsValid())
@@ -107,20 +104,6 @@ EGPUVendor FRealGazeboEncoderFactory::DetectGPUVendor()
 	// Intel GPUs do not support hardware encoding in RealGazeboStreaming
 	// Only NVIDIA (NVENC) and AMD (AMF) are supported
 	return EGPUVendor::Unknown;
-}
-
-bool FRealGazeboEncoderFactory::IsNVENCAvailable()
-{
-	// TODO: Implement proper NVENC availability check
-	// This would involve checking for NVENC SDK and driver support
-	return false;
-}
-
-bool FRealGazeboEncoderFactory::IsAMFAvailable()
-{
-	// TODO: Implement proper AMF availability check
-	// This would involve checking for AMF SDK and driver support
-	return false;
 }
 
 FString FRealGazeboEncoderFactory::GetVendorName(EGPUVendor Vendor)
@@ -199,4 +182,27 @@ TSharedPtr<IRealGazeboHardwareEncoder> FRealGazeboEncoderFactory::TryCreateAMF(c
 
 	UE_LOG(LogRealGazeboStreaming, Log, TEXT("EncoderFactory: AMF encoder created successfully"));
 	return Encoder;
+}
+
+bool FRealGazeboEncoderFactory::IsHardwareEncodingAvailable()
+{
+	// Detect GPU vendor if not already done
+	if (!bVendorDetected)
+	{
+		CachedGPUVendor = DetectGPUVendor();
+		bVendorDetected = true;
+	}
+
+	// Check if any hardware encoder is available
+	if (CachedGPUVendor == EGPUVendor::NVIDIA)
+	{
+		return FRealGazeboNVENCEncoder::IsAvailable();
+	}
+
+	if (CachedGPUVendor == EGPUVendor::AMD)
+	{
+		return FRealGazeboAMFEncoder::IsAvailable();
+	}
+
+	return false;  // No compatible GPU
 }

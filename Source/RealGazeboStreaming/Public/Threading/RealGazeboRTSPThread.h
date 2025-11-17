@@ -73,22 +73,6 @@ public:
 	 */
 	bool EnqueueFrame(const FStreamKey& StreamKey, TSharedPtr<FEncodedFrameData> EncodedFrame);
 
-	/**
-	 * Get statistics for stream
-	 * @param StreamKey Stream to query
-	 * @param OutQueueDepth Current queue depth
-	 * @param OutFramesSent Total frames sent
-	 * @param OutFramesDropped Total frames dropped
-	 */
-	void GetStreamStatistics(const FStreamKey& StreamKey, int32& OutQueueDepth,
-	                         int64& OutFramesSent, int64& OutFramesDropped) const;
-
-	/**
-	 * Get aggregate statistics across all streams
-	 */
-	void GetAggregateStatistics(int32& OutTotalQueueDepth, int64& OutTotalFramesSent,
-	                            int64& OutTotalFramesDropped) const;
-
 private:
 	/** Per-stream queue and statistics */
 	struct FStreamQueue

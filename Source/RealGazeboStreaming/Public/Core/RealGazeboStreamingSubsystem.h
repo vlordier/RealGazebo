@@ -9,14 +9,12 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Core/RealGazeboStreamingTypes.h"
-#include "Core/RealGazeboStreamConfig.h"
 #include "Utils/RealGazeboStreamingStats.h"
 #include "RealGazeboStreamingSubsystem.generated.h"
 
 // Forward declarations
 class FRealGazeboStreamPipeline;
 class FRealGazeboFramePool;
-class FRealGazeboConversionThread;
 class FRealGazeboEncodingThread;
 class FRealGazeboRTSPThread;
 class FRealGazeboRTSPServer;
@@ -95,20 +93,6 @@ public:
 	void StopStream(const FStreamKey& StreamKey);
 
 	/**
-	 * Pause stream for specific camera
-	 * @param StreamKey Stream key to pause
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	void PauseStream(const FStreamKey& StreamKey);
-
-	/**
-	 * Resume stream for specific camera
-	 * @param StreamKey Stream key to resume
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	void ResumeStream(const FStreamKey& StreamKey);
-
-	/**
 	 * Start all registered streams
 	 */
 	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
@@ -160,12 +144,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
 	TArray<FStreamKey> GetAllStreamKeys() const;
 
-	/**
-	 * Get stream statistics for all streams
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	TMap<FStreamKey, FStreamingStats> GetAllStreamStats() const;
-
 	// ========================================
 	// RTSP Server
 	// ========================================
@@ -183,6 +161,14 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming")
 	int32 GetRTSPPort() const;
+
+	/**
+	 * Set RTSP server port (must be called before RTSP server starts)
+	 * @param Port New RTSP port (1024-65535)
+	 * @return True if port was set successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
+	bool SetRTSPPort(int32 Port);
 
 	/**
 	 * Check if RTSP server is running
@@ -219,6 +205,9 @@ public:
 	/** Get shared frame pool */
 	TSharedPtr<FRealGazeboFramePool> GetFramePool() const { return FramePool; }
 
+	/** Get scene capture component pool for reusable capture components */
+	TSharedPtr<class FRealGazeboSceneCapturePool> GetSceneCapturePool() const { return SceneCapturePool; }
+
 	/** Get pipeline for stream key */
 	TSharedPtr<FRealGazeboStreamPipeline> GetPipeline(const FStreamKey& StreamKey) const;
 
@@ -230,6 +219,13 @@ public:
 	bool SupportsTextureEncoding(const FStreamKey& StreamKey) const;
 
 	/**
+	 * Check if stream is experiencing backpressure (considers both encoding and RTSP queues)
+	 * @param StreamKey Stream to check
+	 * @return True if either encoding or RTSP queue is >75% full
+	 */
+	bool IsStreamBackpressured(const FStreamKey& StreamKey) const;
+
+	/**
 	 * Submit GPU texture frame directly to encoding thread (zero-copy path)
 	 * Only use if SupportsTextureEncoding() returns true
 	 * @param StreamKey Target stream
@@ -239,7 +235,20 @@ public:
 	 * @return True if enqueued successfully
 	 */
 	bool SubmitTextureFrame(const FStreamKey& StreamKey, FTexture2DRHIRef Texture,
-	                        double Timestamp, uint64 FrameNumber);
+	                        int64 TimestampUs, uint64 FrameNumber);
+
+	/**
+	 * Update bitrate for stream dynamically (adaptive quality)
+	 * @param StreamKey Target stream
+	 * @param NewBitrateKbps New bitrate in kbps
+	 */
+	void UpdateStreamBitrate(const FStreamKey& StreamKey, int32 NewBitrateKbps);
+
+	/**
+	 * Request keyframe (I-frame) for stream
+	 * @param StreamKey Target stream
+	 */
+	void RequestKeyFrame(const FStreamKey& StreamKey);
 
 private:
 	/** Initialize worker threads */
@@ -260,6 +269,9 @@ private:
 	/** Generate RTSP URL for stream key */
 	FString GenerateRTSPURL(const FStreamKey& StreamKey) const;
 
+	/** Update pool capacities based on active camera/stream count */
+	void UpdatePoolCapacities();
+
 	// ========================================
 	// Member Variables
 	// ========================================
@@ -269,6 +281,9 @@ private:
 
 	/** Shared frame buffer pool */
 	TSharedPtr<FRealGazeboFramePool> FramePool;
+
+	/** SceneCapture2D component pool for reducing allocation overhead */
+	TSharedPtr<class FRealGazeboSceneCapturePool> SceneCapturePool;
 
 	/** Encoding thread (hardware encoding only) */
 	TSharedPtr<FRealGazeboEncodingThread> EncodingThread;

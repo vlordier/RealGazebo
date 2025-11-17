@@ -7,7 +7,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Core/RealGazeboStreamConfig.h"
+#include "Core/RealGazeboStreamingTypes.h"
 #include "Pipeline/RealGazeboFrameData.h"
 #include "RHI.h"
 #include "RHIResources.h"
@@ -50,7 +50,7 @@ public:
 	 * @param Timestamp Frame timestamp in seconds
 	 * @return True if encoded successfully
 	 */
-	virtual bool EncodeTextureFrame(FTexture2DRHIRef SourceTexture, TSharedPtr<FEncodedFrameData> OutEncodedFrame, double Timestamp) = 0;
+	virtual bool EncodeTextureFrame(FTexture2DRHIRef SourceTexture, TSharedPtr<FEncodedFrameData> OutEncodedFrame, int64 TimestampUs) = 0;
 
 	/**
 	 * Request keyframe for next encode

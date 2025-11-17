@@ -38,7 +38,6 @@ namespace AVEncoder
  *
  * Platform Support:
  * - Linux + Vulkan: Uses CUDA context with Vulkan->CUDA texture interop
- * - Windows + D3D12: Uses CUDA context with D3D12->CUDA texture interop
  * - Windows + D3D11: Uses CUDA context with D3D11->CUDA texture interop
  *
  * Features:
@@ -59,7 +58,7 @@ public:
 	//~ Begin IRealGazeboHardwareEncoder Interface
 	virtual bool Initialize(const FRealGazeboStreamConfig& Config) override;
 	virtual void Shutdown() override;
-	virtual bool EncodeTextureFrame(FTexture2DRHIRef SourceTexture, TSharedPtr<FEncodedFrameData> OutEncodedFrame, double Timestamp) override;
+	virtual bool EncodeTextureFrame(FTexture2DRHIRef SourceTexture, TSharedPtr<FEncodedFrameData> OutEncodedFrame, int64 TimestampUs) override;
 	virtual void RequestKeyFrame() override;
 	virtual void UpdateBitrate(int32 NewBitrateKbps) override;
 	virtual FString GetEncoderName() const override { return TEXT("NVENC"); }
@@ -79,7 +78,7 @@ private:
 	/** Input type for platform-specific texture handling */
 	enum class EEncoderInputType : uint8
 	{
-		CUDA,      // CUDA array (Linux Vulkan, Windows D3D12)
+		CUDA,      // CUDA array (Linux Vulkan, Windows D3D11)
 		D3D11,     // D3D11 texture (Windows)
 		Vulkan     // Vulkan image (Linux)
 	};
@@ -121,11 +120,6 @@ private:
 	bool IsRHIDeviceNVIDIA() const;
 
 	/**
-	 * Check if current RHI device is AMD
-	 */
-	bool IsRHIDeviceAMD() const;
-
-	/**
 	 * Callback for encoded packets from AVEncoder
 	 */
 	void OnEncodedPacket(uint32 LayerIndex, const TSharedPtr<AVEncoder::FVideoEncoderInputFrame> Frame,
@@ -146,12 +140,5 @@ private:
 	 * Convert Vulkan texture to CUDA array for encoding (Linux)
 	 */
 	void SetTextureCUDAVulkan(TSharedPtr<AVEncoder::FVideoEncoderInputFrame> InputFrame, FTexture2DRHIRef Texture);
-#endif
-
-#if PLATFORM_WINDOWS && 0  // D3D12 disabled - using D3D11 only
-	/**
-	 * Convert D3D12 texture to CUDA array for encoding (Windows)
-	 */
-	void SetTextureCUDAD3D12(TSharedPtr<AVEncoder::FVideoEncoderInputFrame> InputFrame, FTexture2DRHIRef Texture);
 #endif
 };

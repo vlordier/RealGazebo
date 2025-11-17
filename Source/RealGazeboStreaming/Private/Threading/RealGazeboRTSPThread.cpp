@@ -6,7 +6,7 @@
 
 #include "Threading/RealGazeboRTSPThread.h"
 #include "RTSP/RealGazeboRTSPServer.h"
-#include "Core/RealGazeboStreamingLogger.h"
+#include "Core/RealGazeboStreamingTypes.h"
 
 FRealGazeboRTSPThread::FRealGazeboRTSPThread(TSharedPtr<FRealGazeboRTSPServer> InRTSPServer)
 	: RTSPServer(InRTSPServer)
@@ -104,46 +104,6 @@ bool FRealGazeboRTSPThread::EnqueueFrame(const FStreamKey& StreamKey, TSharedPtr
 	return bEnqueued;
 }
 
-void FRealGazeboRTSPThread::GetStreamStatistics(const FStreamKey& StreamKey, int32& OutQueueDepth,
-                                                 int64& OutFramesSent, int64& OutFramesDropped) const
-{
-	FScopeLock Lock(&QueueMapMutex);
-
-	const TSharedPtr<FStreamQueue>* Found = StreamQueues.Find(StreamKey);
-	if (Found && Found->IsValid())
-	{
-		OutQueueDepth = (*Found)->Queue.GetDepth();
-		OutFramesSent = (*Found)->FramesSent.load();
-		OutFramesDropped = (*Found)->FramesDropped.load();
-	}
-	else
-	{
-		OutQueueDepth = 0;
-		OutFramesSent = 0;
-		OutFramesDropped = 0;
-	}
-}
-
-void FRealGazeboRTSPThread::GetAggregateStatistics(int32& OutTotalQueueDepth, int64& OutTotalFramesSent,
-                                                    int64& OutTotalFramesDropped) const
-{
-	FScopeLock Lock(&QueueMapMutex);
-
-	OutTotalQueueDepth = 0;
-	OutTotalFramesSent = 0;
-	OutTotalFramesDropped = 0;
-
-	for (const auto& Pair : StreamQueues)
-	{
-		if (Pair.Value.IsValid())
-		{
-			OutTotalQueueDepth += Pair.Value->Queue.GetDepth();
-			OutTotalFramesSent += Pair.Value->FramesSent.load();
-			OutTotalFramesDropped += Pair.Value->FramesDropped.load();
-		}
-	}
-}
-
 int32 FRealGazeboRTSPThread::ProcessFrameQueues()
 {
 	FScopeLock Lock(&QueueMapMutex);
@@ -177,8 +137,17 @@ bool FRealGazeboRTSPThread::ProcessStreamQueue(const FStreamKey& StreamKey, FStr
 
 	if (!EncodedFrame.IsValid())
 	{
+		UE_LOG(LogRealGazeboStreaming, Error,
+			TEXT("RTSPThread: ProcessStreamQueue - Invalid frame dequeued for %s"),
+			*StreamKey.ToDebugString());
 		return false;
 	}
+
+	// CRITICAL DEBUG (2025-11-17): Log frame dequeue to trace pipeline flow
+	UE_LOG(LogRealGazeboStreaming, Warning,
+		TEXT("RTSPThread: Dequeued frame %llu for %s | Size: %d bytes | Keyframe: %s | Pushing to RTSPServer..."),
+		EncodedFrame->FrameNumber, *StreamKey.ToDebugString(), EncodedFrame->EncodedData.Num(),
+		EncodedFrame->bIsKeyFrame ? TEXT("YES") : TEXT("NO"));
 
 	// Push frame to RTSP server
 	if (RTSPServer.IsValid())
@@ -187,8 +156,24 @@ bool FRealGazeboRTSPThread::ProcessStreamQueue(const FStreamKey& StreamKey, FStr
 		if (bSuccess)
 		{
 			StreamQueue.FramesSent.fetch_add(1);
+			UE_LOG(LogRealGazeboStreaming, Warning,
+				TEXT("RTSPThread: Successfully pushed frame %llu to RTSPServer for %s"),
+				EncodedFrame->FrameNumber, *StreamKey.ToDebugString());
 			return true;
 		}
+		else
+		{
+			// CRITICAL: PushFrame failed - stream likely not registered!
+			UE_LOG(LogRealGazeboStreaming, Error,
+				TEXT("RTSPThread: FAILED to push frame %llu to RTSPServer for %s - Stream not registered in RTSPServer?"),
+				EncodedFrame->FrameNumber, *StreamKey.ToDebugString());
+		}
+	}
+	else
+	{
+		UE_LOG(LogRealGazeboStreaming, Error,
+			TEXT("RTSPThread: RTSPServer is INVALID for %s"),
+			*StreamKey.ToDebugString());
 	}
 
 	return false;

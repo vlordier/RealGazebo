@@ -7,7 +7,7 @@
 
 #include "CoreMinimal.h"
 #include "Encoding/RealGazeboHardwareEncoder.h"
-#include "Core/RealGazeboStreamConfig.h"
+#include "Core/RealGazeboStreamingTypes.h"
 
 /**
  * GPU Vendor Detection (Hardware Encoding Support)
@@ -48,20 +48,6 @@ public:
 	 */
 	static TSharedPtr<IRealGazeboHardwareEncoder> CreateEncoder(const FRealGazeboStreamConfig& Config);
 
-	/**
-	 * Create specific encoder type (for debugging/testing)
-	 * @param EncoderType "NVENC", "AMF", or "Mock"
-	 * @param Config Stream configuration
-	 * @return Encoder instance or nullptr if not available
-	 */
-	static TSharedPtr<IRealGazeboHardwareEncoder> CreateEncoderByName(const FString& EncoderType,
-	                                                                   const FRealGazeboStreamConfig& Config);
-
-	/**
-	 * Get list of available encoder names
-	 * @return Array of available encoder names
-	 */
-	static TArray<FString> GetAvailableEncoders();
 
 	/**
 	 * Check if hardware encoding is available
@@ -71,7 +57,7 @@ public:
 
 	/**
 	 * Get recommended encoder name for this system
-	 * @return Encoder name (NVENC/AMF/Software)
+	 * @return Encoder name (NVENC/AMF)
 	 */
 	static FString GetRecommendedEncoderName();
 
@@ -85,17 +71,8 @@ private:
 	/** Try to create AMF encoder (AMD hardware via native RHI) */
 	static TSharedPtr<IRealGazeboHardwareEncoder> TryCreateAMF(const FRealGazeboStreamConfig& Config);
 
-	/** Try to create software encoder (CPU fallback) */
-	static TSharedPtr<IRealGazeboHardwareEncoder> TryCreateSoftware(const FRealGazeboStreamConfig& Config);
-
 	/** Get vendor name string */
 	static FString GetVendorName(EGPUVendor Vendor);
-
-	/** Check NVENC availability */
-	static bool IsNVENCAvailable();
-
-	/** Check AMF availability */
-	static bool IsAMFAvailable();
 
 	/** Cached GPU vendor */
 	static EGPUVendor CachedGPUVendor;

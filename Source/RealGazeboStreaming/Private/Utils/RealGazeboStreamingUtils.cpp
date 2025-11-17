@@ -6,150 +6,122 @@
 
 #include "Utils/RealGazeboStreamingUtils.h"
 
-FIntPoint FRealGazeboStreamingUtils::GetResolutionDimensions(EStreamResolution Resolution)
+namespace
 {
-	switch (Resolution)
+	struct FResolutionData
 	{
-		// 16:9 Resolutions (12 total)
-		case EStreamResolution::R16_9_240p:  return FIntPoint(426, 240);   // 240p SD
-		case EStreamResolution::R16_9_360p:  return FIntPoint(640, 360);   // nHD
-		case EStreamResolution::R16_9_480p:  return FIntPoint(854, 480);   // FWVGA
-		case EStreamResolution::R16_9_540p:  return FIntPoint(960, 540);   // qHD
-		case EStreamResolution::R16_9_576p:  return FIntPoint(1024, 576);  // WSVGA
-		case EStreamResolution::R16_9_720p:  return FIntPoint(1280, 720);  // HD (720p)
-		case EStreamResolution::R16_9_768p:  return FIntPoint(1366, 768);  // FWXGA
-		case EStreamResolution::R16_9_900p:  return FIntPoint(1600, 900);  // HD+
-		case EStreamResolution::R16_9_1080p: return FIntPoint(1920, 1080); // Full HD (1080p)
-		case EStreamResolution::R16_9_1440p: return FIntPoint(2560, 1440); // QHD (1440p / 2K)
-		case EStreamResolution::R16_9_1800p: return FIntPoint(3200, 1800); // QHD+
-		case EStreamResolution::R16_9_2160p: return FIntPoint(3840, 2160); // 4K UHD
+		int32 Width;
+		int32 Height;
+		int32 BitrateKbps_30fps;   // Bitrate for 30 FPS
+		int32 BitrateKbps_60fps;   // Bitrate for 60 FPS (higher due to temporal complexity)
+	};
 
-		// 4:3 Resolutions (11 total)
-		case EStreamResolution::R4_3_240p:   return FIntPoint(320, 240);   // QVGA 
-		case EStreamResolution::R4_3_480p:   return FIntPoint(640, 480);   // VGA
-		case EStreamResolution::R4_3_600p:   return FIntPoint(800, 600);   // SVGA
-		case EStreamResolution::R4_3_768p:   return FIntPoint(1024, 768);  // XGA
-		case EStreamResolution::R4_3_960p:   return FIntPoint(1280, 960);  // SXGA-
-		case EStreamResolution::R4_3_1050p:  return FIntPoint(1400, 1050); // SXGA+
-		case EStreamResolution::R4_3_1200p:  return FIntPoint(1600, 1200); // UXGA
-		case EStreamResolution::R4_3_1440p:  return FIntPoint(1920, 1440); // QXGA
-		case EStreamResolution::R4_3_1536p:  return FIntPoint(2048, 1536); // QXGA 
-		case EStreamResolution::R4_3_1920p:  return FIntPoint(2560, 1920); // QSXGA
-		case EStreamResolution::R4_3_2400p:  return FIntPoint(3200, 2400); // QUXGA
+	// Resolution lookup table for ultra-low latency RTSP streaming (H.264 Baseline profile)
+	// All resolutions have 16-pixel aligned WIDTH to prevent H.264 bitstream corruption
+	//
+	// BITRATE RECOMMENDATIONS (2025-11-17):
+	// Optimized for ultra-low latency H.264 streaming with CBR (Constant Bitrate)
+	// Encoding settings: tune=zerolatency, 0 B-frames, 1-second keyframe interval
+	//
+	// Key principles:
+	// - CBR for predictable network bandwidth (critical for robotics/drones)
+	// - Conservative bitrates to prevent network congestion
+	// - Safe margin below 8 Mbps ceiling for adaptive quality headroom
+	// - 60 FPS gets ~30-50% higher bitrate due to temporal complexity
+	//
+	// REMOVED resolutions:
+	// - 426x240, 854x480, 1366x768, 1400x1050 (width not 16-aligned, caused decoder errors)
+	// - 1920x1440, 2560x1440, 3840x2160 (too high for ultra-low latency Baseline profile)
+	constexpr FResolutionData SafeResolutions[] = {
+		//    Width   Height  30fps    60fps
+		// 16:9 aspect ratio (width 16-aligned, <=1080p)
+		{640,   360,   1200,   2000},   // 360p: 800-1500 @ 30fps, 1200-2500 @ 60fps (optimized range)
+		{960,   540,   2250,   3500},   // 540p: 1500-3000 @ 30fps, 2500-4500 @ 60fps (optimized range)
+		{1024,  576,   2650,   4000},   // 576p: 1800-3500 @ 30fps, 2800-5000 @ 60fps (optimized range)
+		{1280,  720,   3250,   5000},   // 720p: 2500-4000 @ 30fps, 3500-6000 @ 60fps (optimized range)
+		{1600,  900,   4750,   6500},   // 900p: 3500-6000 @ 30fps, 5000-8000 @ 60fps (optimized range)
+		{1920,  1080,  5000,   7500},   // 1080p: 4000-6000 @ 30fps, 6000-9000 @ 60fps (clamped to 7500 for headroom)
 
-		default: return FIntPoint(1280, 720);
-	}
+		// 4:3 aspect ratio (width 16-aligned, <=1200p)
+		{320,   240,   600,    1200},   // 240p: 400-800 @ 30fps (interpolated for 60fps)
+		{640,   480,   1500,   2400},   // 480p: 1000-2000 @ 30fps, 1800-3000 @ 60fps (optimized range)
+		{800,   600,   2000,   3250},   // 600p: 1500-2500 @ 30fps, 2500-4000 @ 60fps (optimized range)
+		{1024,  768,   2750,   4000},   // 768p: 2000-3500 @ 30fps, 3000-5000 @ 60fps (optimized range)
+		{1280,  960,   4000,   6000},   // 960p: 3000-5000 @ 30fps, 4500-7000 @ 60fps (optimized range)
+		{1600,  1200,  6000,   8000}    // 1200p: 4500-7000 @ 30fps, 7000-12000 @ 60fps (clamped to 8000 for ceiling)
+	};
+
+	constexpr int32 NumSafeResolutions = sizeof(SafeResolutions) / sizeof(FResolutionData);
 }
 
-int32 FRealGazeboStreamingUtils::CalculateBitrate(EStreamResolution Resolution, EStreamQuality Quality)
+FIntPoint FRealGazeboStreamingUtils::GetResolutionDimensions(EStreamResolution Resolution)
 {
-	// Get resolution dimensions
-	FIntPoint Dimensions = GetResolutionDimensions(Resolution);
+	const uint8 Index = static_cast<uint8>(Resolution);
 
-	// Calculate total pixels
-	int64 TotalPixels = static_cast<int64>(Dimensions.X) * static_cast<int64>(Dimensions.Y);
-
-	// Base bitrate calculation: ~0.1 bits per pixel for High quality at 30 FPS
-	// This is a industry-standard formula for H.264 bitrate estimation
-	// Formula: Bitrate (kbps) = (Width x Height x BitsPerPixel x FPS) / 1000
-	// For High quality: ~0.1 bpp, Medium: ~0.075 bpp, Low: ~0.05 bpp, Ultra: ~0.15 bpp
-
-	float BitsPerPixel = 0.1f;  // Baseline for High quality
-	const int32 AssumedFPS = 30;  // Standard FPS for bitrate calculation
-
-	// Adjust bits per pixel based on quality
-	switch (Quality)
+	if (Index < NumSafeResolutions)
 	{
-		case EStreamQuality::Low:    BitsPerPixel = 0.05f;  break;  // 50% of High
-		case EStreamQuality::Medium: BitsPerPixel = 0.075f; break;  // 75% of High
-		case EStreamQuality::High:   BitsPerPixel = 0.1f;   break;  // Baseline
-		case EStreamQuality::Ultra:  BitsPerPixel = 0.15f;  break;  // 150% of High
+		const FResolutionData& Data = SafeResolutions[Index];
+		return FIntPoint(Data.Width, Data.Height);
 	}
 
-	// Calculate bitrate: (Pixels x BPP x FPS) / 1000 = kbps
-	float BitrateKbps = (TotalPixels * BitsPerPixel * AssumedFPS) / 1000.0f;
+	// Fallback to 720p
+	return FIntPoint(1280, 720);
+}
 
-	// Apply minimum/maximum constraints
-	int32 FinalBitrate = FMath::RoundToInt(BitrateKbps);
-	FinalBitrate = FMath::Clamp(FinalBitrate, 500, 50000);  // Min 500kbps, Max 50Mbps
+int32 FRealGazeboStreamingUtils::CalculateBitrateUltraLowLatency(EStreamResolution Resolution, EStreamFrameRate FrameRate)
+{
+	const uint8 Index = static_cast<uint8>(Resolution);
 
-	return FinalBitrate;
+	if (Index < NumSafeResolutions)
+	{
+		const FResolutionData& Data = SafeResolutions[Index];
+
+		// Select bitrate based on frame rate
+		// 60 FPS requires higher bitrate due to increased temporal complexity
+		return (FrameRate == EStreamFrameRate::FPS_60)
+			? Data.BitrateKbps_60fps
+			: Data.BitrateKbps_30fps;
+	}
+
+	// Fallback to 720p @ 30fps bitrate
+	return 3250;
 }
 
 int32 FRealGazeboStreamingUtils::GetFrameRateValue(EStreamFrameRate FrameRate)
 {
 	switch (FrameRate)
 	{
-		case EStreamFrameRate::FPS_15: return 15;
 		case EStreamFrameRate::FPS_30: return 30;
 		case EStreamFrameRate::FPS_60: return 60;
-		default: return 30;
+		default: return 30;  // Fallback to 30 FPS
 	}
 }
 
-TArray<EStreamResolution> FRealGazeboStreamingUtils::GetResolutionsForAspectRatio(EStreamAspectRatio AspectRatio)
+int32 FRealGazeboStreamingUtils::CalculateGOPSize(EStreamFrameRate FrameRate)
 {
-	TArray<EStreamResolution> Resolutions;
+	const int32 FPS = GetFrameRateValue(FrameRate);
 
-	if (AspectRatio == EStreamAspectRatio::Ratio_16_9)
-	{
-		// All 12 16:9 resolutions
-		Resolutions.Add(EStreamResolution::R16_9_240p);
-		Resolutions.Add(EStreamResolution::R16_9_360p);
-		Resolutions.Add(EStreamResolution::R16_9_480p);
-		Resolutions.Add(EStreamResolution::R16_9_540p);
-		Resolutions.Add(EStreamResolution::R16_9_576p);
-		Resolutions.Add(EStreamResolution::R16_9_720p);
-		Resolutions.Add(EStreamResolution::R16_9_768p);
-		Resolutions.Add(EStreamResolution::R16_9_900p);
-		Resolutions.Add(EStreamResolution::R16_9_1080p);
-		Resolutions.Add(EStreamResolution::R16_9_1440p);
-		Resolutions.Add(EStreamResolution::R16_9_1800p);
-		Resolutions.Add(EStreamResolution::R16_9_2160p);
-	}
-	else // 4:3
-	{
-		// All 11 4:3 resolutions
-		Resolutions.Add(EStreamResolution::R4_3_240p);
-		Resolutions.Add(EStreamResolution::R4_3_480p);
-		Resolutions.Add(EStreamResolution::R4_3_600p);
-		Resolutions.Add(EStreamResolution::R4_3_768p);
-		Resolutions.Add(EStreamResolution::R4_3_960p);
-		Resolutions.Add(EStreamResolution::R4_3_1050p);
-		Resolutions.Add(EStreamResolution::R4_3_1200p);
-		Resolutions.Add(EStreamResolution::R4_3_1440p);
-		Resolutions.Add(EStreamResolution::R4_3_1536p);
-		Resolutions.Add(EStreamResolution::R4_3_1920p);
-		Resolutions.Add(EStreamResolution::R4_3_2400p);
-	}
+	// INDUSTRY STANDARD: 1-second keyframe interval for RTSP/RTP streaming
+	// This matches:
+	// - YouTube Live: 2-4s GOP
+	// - Twitch: 2s GOP
+	// - RTSP surveillance: 1-2s GOP
+	// - Live555 recommendation: 1s GOP (balance of seekability vs bandwidth)
+	//
+	// Benefits over 0.5s GOP:
+	// - 10-15% bandwidth savings (fewer keyframes)
+	// - Smoother bitrate profile (less spiky)
+	// - Industry standard for RTSP streaming
+	// - Better for recording and archiving
+	//
+	// Trade-off:
+	// - Channel switch time: 1s vs 0.5s (acceptable for most use cases)
+	// - Error recovery: 1s vs 0.5s (still fast enough for RTSP)
+	//
+	// FPS mapping (30 and 60 FPS only):
+	//   30 FPS -> GOP 30 (1.0s)
+	//   60 FPS -> GOP 60 (1.0s)
+	const int32 GOP = FPS;  // 1-second keyframe interval
 
-	return Resolutions;
-}
-
-bool FRealGazeboStreamingUtils::IsResolutionCompatibleWithAspectRatio(EStreamResolution Resolution, EStreamAspectRatio AspectRatio)
-{
-	TArray<EStreamResolution> CompatibleResolutions = GetResolutionsForAspectRatio(AspectRatio);
-	return CompatibleResolutions.Contains(Resolution);
-}
-
-FString FRealGazeboStreamingUtils::H264ProfileToString(EH264Profile Profile)
-{
-	switch (Profile)
-	{
-		case EH264Profile::Baseline: return TEXT("Baseline");
-		case EH264Profile::Main:     return TEXT("Main");
-		case EH264Profile::High:     return TEXT("High");
-		default: return TEXT("Main");
-	}
-}
-
-int32 FRealGazeboStreamingUtils::GetH264ProfileLevel(EH264Profile Profile)
-{
-	switch (Profile)
-	{
-		case EH264Profile::Baseline: return 30;  // Level 3.0
-		case EH264Profile::Main:     return 40;  // Level 4.0
-		case EH264Profile::High:     return 41;  // Level 4.1
-		default: return 40;
-	}
+	return FMath::Max(GOP, 1);  // Only prevent zero/negative
 }

@@ -22,9 +22,9 @@ class REALGAZEBOSTREAMING_API FRealGazeboFramePool
 public:
 	/**
 	 * Constructor
-	 * @param InMaxPoolSize Maximum number of frames to keep in pool
+	 * @param InInitialPoolSize Initial pool size (will grow automatically based on demand)
 	 */
-	explicit FRealGazeboFramePool(int32 InMaxPoolSize = 20);
+	explicit FRealGazeboFramePool(int32 InInitialPoolSize = 10);
 
 	~FRealGazeboFramePool();
 
@@ -46,11 +46,6 @@ public:
 	 * Clear all pooled frames (releases memory)
 	 */
 	void ClearPool();
-
-	/**
-	 * Shrink pool to max size (remove excess frames)
-	 */
-	void ShrinkPool();
 
 	/**
 	 * Get pool statistics
@@ -77,9 +72,20 @@ public:
 	 */
 	FString GetDebugString() const;
 
+	/**
+	 * Get current maximum pool size
+	 */
+	int32 GetMaxPoolSize() const { return MaxPoolSize.load(std::memory_order_relaxed); }
+
+	/**
+	 * Update pool capacity based on active stream count
+	 * @param ActiveStreamCount Number of currently active streams
+	 */
+	void UpdateCapacity(int32 ActiveStreamCount);
+
 private:
-	/** Maximum frames to keep in pool */
-	int32 MaxPoolSize;
+	/** Dynamic pool size (grows based on active streams) */
+	std::atomic<int32> MaxPoolSize;
 
 	/** Pooled encoded frames (resolution-independent) */
 	TArray<TSharedPtr<FEncodedFrameData>> EncodedFramePool;

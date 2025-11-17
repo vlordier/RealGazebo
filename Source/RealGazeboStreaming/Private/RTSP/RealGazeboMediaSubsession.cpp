@@ -6,7 +6,7 @@
 
 #include "RTSP/RealGazeboMediaSubsession.h"
 #include "RTSP/RealGazeboH264Source.h"
-#include "Core/RealGazeboStreamingLogger.h"
+#include "Core/RealGazeboStreamingTypes.h"
 
 // Live555 includes
 #include "H264VideoRTPSink.hh"
@@ -47,17 +47,31 @@ protected:
 	virtual FramedSource* createNewStreamSource(unsigned clientSessionId,
 	                                            unsigned& estBitrate) override
 	{
-		// Estimate bitrate (kbps)
-		estBitrate = 5000;  // Default 5 Mbps
+		// CRITICAL DEBUG (2025-11-17): Log which StreamKey is being used for source creation
+		UE_LOG(LogRealGazeboStreaming, Error,
+			TEXT("MediaSubsession: createNewStreamSource CALLED - ClientSession %u | %s"),
+			clientSessionId, *StreamKey.ToDebugString());
+
+		// Get actual bitrate from stream configuration
+		// NOTE: This is called when a client connects, so we need to query the current stream config
+		estBitrate = FRealGazeboMediaSubsession::GetEstimatedBitrate(StreamKey);
 
 		// Create H.264 source
 		FramedSource* H264Source = FRealGazeboH264Source::CreateNew(envir(), StreamKey);
 		if (!H264Source)
 		{
+			UE_LOG(LogRealGazeboStreaming, Error,
+				TEXT("MediaSubsession: FAILED to create H264Source for %s"),
+				*StreamKey.ToDebugString());
 			return nullptr;
 		}
 
+		UE_LOG(LogRealGazeboStreaming, Error,
+			TEXT("MediaSubsession: Created H264Source successfully for %s"),
+			*StreamKey.ToDebugString());
+
 		// Wrap in H.264 framer
+		// OutPacketBuffer::maxSize is set to 6MB in RTSPServer::Initialize() for RTP output
 		return H264VideoStreamFramer::createNew(envir(), H264Source);
 	}
 
@@ -76,6 +90,10 @@ protected:
 		unsigned PPSSize = PPS.Num();
 
 		// Create H.264 RTP sink
+		// NOTE: OutPacketBuffer::maxSize is set to 6MB in RTSPServer::Initialize() to handle
+		// large NAL units. H264VideoStreamFramer automatically fragments NAL units >MTU.
+		// The "StreamParser::afterGettingBytes() warning" is informational and does NOT indicate
+		// actual corruption - it's Live555's way of reporting fragmented packets.
 		return H264VideoRTPSink::createNew(envir(), rtpGroupsock, rtpPayloadTypeIfDynamic,
 		                                   SPSData, SPSSize, PPSData, PPSSize);
 	}
@@ -98,9 +116,10 @@ void FRealGazeboMediaSubsession::SetSPSPPS(const FStreamKey& StreamKey, const TA
 	FSPSPPSData& Data = StreamSPSPPS.FindOrAdd(StreamKey);
 	Data.SPS = SPS;
 	Data.PPS = PPS;
+	// BitrateKbps retains previous value or default (3250) if first time
 
-	UE_LOG(LogRealGazeboStreaming, Verbose, TEXT("MediaSubsession: Set SPS/PPS for stream %s (SPS: %d bytes, PPS: %d bytes)"),
-		*StreamKey.ToString(), SPS.Num(), PPS.Num());
+	UE_LOG(LogRealGazeboStreaming, Verbose, TEXT("MediaSubsession: Set SPS/PPS for stream %s (SPS: %d bytes, PPS: %d bytes, Bitrate: %d kbps)"),
+		*StreamKey.ToString(), SPS.Num(), PPS.Num(), Data.BitrateKbps);
 }
 
 TArray<uint8> FRealGazeboMediaSubsession::GetSPS(const FStreamKey& StreamKey)
@@ -119,8 +138,31 @@ TArray<uint8> FRealGazeboMediaSubsession::GetPPS(const FStreamKey& StreamKey)
 	return Data ? Data->PPS : TArray<uint8>();
 }
 
-void FRealGazeboMediaSubsession::ClearAllSPSPPS()
+unsigned FRealGazeboMediaSubsession::GetEstimatedBitrate(const FStreamKey& StreamKey)
+{
+	// Retrieve cached bitrate set alongside SPS/PPS
+	// This is called when a client connects to populate the RTSP SDP
+	FScopeLock Lock(&SPSPPSMutex);
+
+	const FSPSPPSData* Data = StreamSPSPPS.Find(StreamKey);
+	if (Data)
+	{
+		return static_cast<unsigned>(Data->BitrateKbps);
+	}
+
+	// Fallback to conservative estimate if stream not yet registered
+	// 3250 kbps = 720p @ 30fps default from StreamingTypes.h
+	return 3250;
+}
+
+void FRealGazeboMediaSubsession::UpdateBitrate(const FStreamKey& StreamKey, int32 BitrateKbps)
 {
 	FScopeLock Lock(&SPSPPSMutex);
-	StreamSPSPPS.Empty();
+
+	FSPSPPSData& Data = StreamSPSPPS.FindOrAdd(StreamKey);
+	Data.BitrateKbps = BitrateKbps;
+
+	UE_LOG(LogRealGazeboStreaming, Verbose,
+		TEXT("MediaSubsession: Updated cached bitrate for stream %s to %d kbps"),
+		*StreamKey.ToString(), BitrateKbps);
 }

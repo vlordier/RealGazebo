@@ -108,17 +108,6 @@ public:
 	}
 
 	/**
-	 * Peek at front item without removing
-	 * @param OutItem Receives peeked item
-	 * @return True if item was peeked, false if queue empty
-	 */
-	bool Peek(T& OutItem)
-	{
-		FScopeLock Lock(&QueueMutex);
-		return Queue.Peek(OutItem);
-	}
-
-	/**
 	 * Clear all items from queue
 	 */
 	void Clear()
@@ -134,15 +123,6 @@ public:
 	bool IsEmpty() const
 	{
 		return CurrentDepth.load(std::memory_order_relaxed) == 0;
-	}
-
-	/**
-	 * Check if queue is full
-	 */
-	bool IsFull() const
-	{
-		if (MaxQueueSize <= 0) return false;
-		return CurrentDepth.load(std::memory_order_relaxed) >= MaxQueueSize;
 	}
 
 	/**
@@ -170,20 +150,12 @@ public:
 	}
 
 	/**
-	 * Get queue utilization (0.0 to 1.0)
-	 */
-	float GetUtilization() const
-	{
-		if (MaxQueueSize <= 0) return 0.0f;
-		return static_cast<float>(GetDepth()) / static_cast<float>(MaxQueueSize);
-	}
-
-	/**
 	 * Check if queue is experiencing backpressure (>75% full)
 	 */
 	bool IsBackpressured() const
 	{
-		return GetUtilization() > 0.75f;
+		if (MaxQueueSize <= 0) return false;
+		return GetDepth() > (MaxQueueSize * 3 / 4);
 	}
 
 	/**
@@ -234,12 +206,14 @@ public:
 	 */
 	FString GetDebugString() const
 	{
+		const int32 Depth = GetDepth();
+		const float Utilization = (MaxQueueSize > 0) ? (static_cast<float>(Depth) / MaxQueueSize * 100.0f) : 0.0f;
 		return FString::Printf(
 			TEXT("%s: Depth=%d/%d (%.1f%%), Peak=%d, Enqueued=%llu, Dequeued=%llu, Dropped=%llu"),
 			*QueueName,
-			GetDepth(),
+			Depth,
 			MaxQueueSize,
-			GetUtilization() * 100.0f,
+			Utilization,
 			GetPeakDepth(),
 			GetTotalEnqueued(),
 			GetTotalDequeued(),

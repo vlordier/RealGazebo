@@ -43,32 +43,52 @@ public:
 	static void PushFrameData(const FStreamKey& StreamKey, const TArray<uint8>& FrameData,
 	                          double Timestamp, bool bIsKeyFrame);
 
-	/**
-	 * Check if frame data is available for stream
-	 * @param StreamKey Stream to query
-	 * @return True if frame available
-	 */
-	static bool HasFrameData(const FStreamKey& StreamKey);
 
 	/**
-	 * Clear all frame buffers (on shutdown)
+	 * Set maximum queue size for stream
+	 * @param StreamKey Target stream
+	 * @param MaxQueueSize Maximum number of frames to buffer
 	 */
-	static void ClearAllFrameBuffers();
+	static void SetMaxQueueSize(const FStreamKey& StreamKey, int32 MaxQueueSize);
 
 protected:
 	// Internal Live555 FramedSource implementation
 	class FH264LiveFramedSource;
 
-	// Per-stream frame buffer data
-	struct FFrameBuffer
+	// Individual NAL unit data (for per-NAL delivery to Live555)
+	struct FNALUnitData
 	{
-		TArray<uint8> Data;
-		double Timestamp = 0.0;
-		bool bIsKeyFrame = false;
-		bool bHasNewFrame = false;
+		TArray<uint8> Data;         // NAL unit payload (Annex-B format with start code)
+		double Timestamp = 0.0;     // Presentation timestamp
+		bool bIsKeyFrame = false;   // True if this NAL is part of a keyframe
+		uint8 NALType = 0;          // NAL unit type (1=P-slice, 5=I-slice, etc.)
+		uint64 FrameNumber = 0;     // Frame this NAL belongs to
+
+		FNALUnitData() = default;
+		FNALUnitData(const TArray<uint8>& InData, double InTimestamp, bool bInIsKeyFrame,
+		             uint8 InNALType, uint64 InFrameNumber)
+			: Data(InData), Timestamp(InTimestamp), bIsKeyFrame(bInIsKeyFrame)
+			, NALType(InNALType), FrameNumber(InFrameNumber)
+		{}
 	};
 
-	// Stream frame buffers (thread-safe access)
-	static TMap<FStreamKey, FFrameBuffer> StreamFrameBuffers;
-	static FCriticalSection FrameBufferMutex;
+	// Per-stream NAL unit queue (delivers one NAL at a time to Live555)
+	struct FStreamNALQueue
+	{
+		TQueue<TSharedPtr<FNALUnitData>> NALUnits;  // Queue of individual NAL units
+		std::atomic<int32> CurrentSize{0};          // Current queue size (atomic)
+		uint64 FrameCounter = 0;                    // Monotonic frame counter
+		int32 MaxQueueSize = 300;                   // Max NAL units (set by StreamManager: FPS x 10)
+		int64 NALsDropped = 0;                      // Stats: NALs dropped due to queue full
+
+		// TQueue is not copyable - prevent accidental copies
+		FStreamNALQueue() = default;
+		FStreamNALQueue(const FStreamNALQueue&) = delete;
+		FStreamNALQueue& operator=(const FStreamNALQueue&) = delete;
+	};
+
+	// Stream NAL queues (thread-safe access)
+	// Using TSharedPtr because TQueue is not copyable
+	static TMap<FStreamKey, TSharedPtr<FStreamNALQueue>> StreamNALQueues;
+	static FCriticalSection NALQueueMutex;
 };
