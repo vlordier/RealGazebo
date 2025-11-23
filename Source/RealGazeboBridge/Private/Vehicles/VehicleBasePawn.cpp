@@ -163,10 +163,10 @@ void AVehicleBasePawn::InitializeForPool(const FVehicleID& InVehicleID, uint8 In
     
     // Set actor display name using vehicle name from DataTable + vehicle ID
     SetVehicleDisplayName(InVehicleID, InVehicleType);
-    
+
     // Call Blueprint event
     OnVehicleActivated(InVehicleID);
-    
+
     UE_LOG(LogRealGazeboBridge, VeryVerbose, TEXT("Vehicle %s activated from pool"), *InVehicleID.ToString());
 }
 
@@ -185,6 +185,7 @@ void AVehicleBasePawn::ResetForPool()
     // Reset all state
     VehicleID = FVehicleID();
     VehicleType = 0;
+    VehicleTypeName = TEXT("");
     TargetPosition = FVector::ZeroVector;
     TargetRotation = FQuat::Identity;
     bHasMovementTarget = false;
@@ -203,10 +204,10 @@ void AVehicleBasePawn::ResetForPool()
             RotatingComp->RotationRate = FRotator::ZeroRotator;
         }
     }
-    
+
     // Call Blueprint event
     OnVehicleDeactivated();
-    
+
     UE_LOG(LogRealGazeboBridge, VeryVerbose, TEXT("Vehicle reset for pool"));
 }
 
@@ -393,20 +394,24 @@ void AVehicleBasePawn::SetVehicleDisplayName(const FVehicleID& InVehicleID, uint
     {
         if (const FBridgeVehicleConfigRow* Config = BridgeSubsystem->GetVehicleConfigInternal(InVehicleType))
         {
+            // Store vehicle type name for RTSP URL generation
+            VehicleTypeName = Config->VehicleName;
+
             // Create display name: vehiclename_vehicleID (e.g., "iris_1", "rover_3")
             FString VehicleNameLower = Config->VehicleName.ToLower();
             FString DisplayName = FString::Printf(TEXT("%s_%d"), *VehicleNameLower, InVehicleID.VehicleNum);
-            
+
 #if WITH_EDITOR
             // Set actor label (shows in outliner)
             SetActorLabel(DisplayName);
 #endif
-            
-            UE_LOG(LogRealGazeboBridge, Verbose, TEXT("Vehicle display name set to: %s"), *DisplayName);
+
+            UE_LOG(LogRealGazeboBridge, Verbose, TEXT("Vehicle display name set to: %s (VehicleTypeName: %s)"), *DisplayName, *VehicleTypeName);
         }
         else
         {
             // Fallback if no config found
+            VehicleTypeName = TEXT("");
             FString FallbackName = FString::Printf(TEXT("vehicle_%d_%d"), InVehicleType, InVehicleID.VehicleNum);
 #if WITH_EDITOR
             SetActorLabel(FallbackName);
@@ -417,6 +422,7 @@ void AVehicleBasePawn::SetVehicleDisplayName(const FVehicleID& InVehicleID, uint
     else
     {
         // Fallback if subsystem not available
+        VehicleTypeName = TEXT("");
         FString FallbackName = FString::Printf(TEXT("vehicle_%d_%d"), InVehicleType, InVehicleID.VehicleNum);
 #if WITH_EDITOR
         SetActorLabel(FallbackName);

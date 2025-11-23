@@ -8,23 +8,30 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
-#include "Core/RealGazeboStreamingTypes.h"
-#include "Utils/RealGazeboStreamingStats.h"
+#include "StreamingTypes.h"
 #include "RealGazeboStreamingSubsystem.generated.h"
 
 // Forward declarations
-class FRealGazeboStreamPipeline;
-class FRealGazeboFramePool;
-class FRealGazeboEncodingThread;
-class FRealGazeboRTSPThread;
-class FRealGazeboRTSPServer;
-class URealGazeboStreamingCamera;
-struct FVehicleID;
+class UVehicleCameraComponent;
+class FStreamingPipeline;
+class FRTSPServerWrapper;
 
 /**
- * RealGazebo Streaming Subsystem
- * GameInstanceSubsystem that manages all streaming operations
- * Persists across level changes
+ * URealGazeboStreamingSubsystem
+ *
+ * Game instance subsystem that manages all vehicle camera streams.
+ * Coordinates RTSP server and streaming pipelines.
+ *
+ * Responsibilities:
+ * - Start/stop RTSP server
+ * - Create/destroy streaming pipelines
+ * - Manage stream lifecycle
+ * - Enforce stream isolation guarantees
+ *
+ * Architecture:
+ * - One RTSP server (shared, runs on background thread)
+ * - Multiple streaming pipelines (one per stream, fully isolated)
+ * - Each pipeline: Capture → Pool → Encoder → Thread → NAL → RTSP
  */
 UCLASS()
 class REALGAZEBOSTREAMING_API URealGazeboStreamingSubsystem : public UGameInstanceSubsystem
@@ -32,276 +39,182 @@ class REALGAZEBOSTREAMING_API URealGazeboStreamingSubsystem : public UGameInstan
 	GENERATED_BODY()
 
 public:
-	//~ Begin USubsystem Interface
+	//----------------------------------------------------------
+	// USubsystem Interface
+	//----------------------------------------------------------
+
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
-	//~ End USubsystem Interface
+
+	//----------------------------------------------------------
+	// RTSP Server Management
+	//----------------------------------------------------------
 
 	/**
-	 * Get subsystem instance from world context
-	 * @param WorldContext Any UObject with world context
-	 * @return Subsystem instance or nullptr
-	 */
-	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming", meta = (WorldContext = "WorldContextObject"))
-	static URealGazeboStreamingSubsystem* GetStreamingSubsystem(const UObject* WorldContextObject);
-
-	// ========================================
-	// Camera Registration
-	// ========================================
-
-	/**
-	 * Register camera for streaming
-	 * @param Camera Camera component to register
-	 * @param Config Stream configuration
-	 * @return True if registered successfully
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	bool RegisterCamera(URealGazeboStreamingCamera* Camera, const FRealGazeboStreamConfig& Config);
-
-	/**
-	 * Unregister camera from streaming
-	 * @param Camera Camera component to unregister
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	void UnregisterCamera(URealGazeboStreamingCamera* Camera);
-
-	/**
-	 * Check if camera is registered
-	 * @param StreamKey Stream key to check
-	 * @return True if camera is registered
-	 */
-	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming")
-	bool IsCameraRegistered(const FStreamKey& StreamKey) const;
-
-	// ========================================
-	// Stream Control
-	// ========================================
-
-	/**
-	 * Start stream for specific camera
-	 * @param StreamKey Stream key to start
+	 * Start RTSP server on specified port.
+	 *
+	 * @param Port - RTSP port (default 8554)
 	 * @return True if started successfully
 	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	bool StartStream(const FStreamKey& StreamKey);
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo Streaming")
+	bool StartRTSPServer(int32 Port = 8554);
 
-	/**
-	 * Stop stream for specific camera
-	 * @param StreamKey Stream key to stop
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	void StopStream(const FStreamKey& StreamKey);
+	/** Stop RTSP server */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo Streaming")
+	void StopRTSPServer();
 
-	/**
-	 * Start all registered streams
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	void StartAllStreams();
-
-	/**
-	 * Stop all active streams
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	void StopAllStreams();
-
-	/**
-	 * Get stream state
-	 * @param StreamKey Stream key to query
-	 * @return Current stream state
-	 */
-	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming")
-	EStreamState GetStreamState(const FStreamKey& StreamKey) const;
-
-	/**
-	 * Get number of active streams
-	 */
-	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming")
-	int32 GetActiveStreamCount() const;
-
-	// ========================================
-	// Statistics
-	// ========================================
-
-	/**
-	 * Get statistics for specific stream
-	 * @param StreamKey Stream key to query
-	 * @param OutStats Receives stream statistics
-	 * @return True if stream exists and stats were retrieved
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	bool GetStreamStats(const FStreamKey& StreamKey, FStreamingStats& OutStats) const;
-
-	/**
-	 * Get aggregated statistics across all streams
-	 * @param OutStats Receives aggregated statistics
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	void GetAggregatedStats(FStreamingStats& OutStats) const;
-
-	/**
-	 * Get all stream keys
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	TArray<FStreamKey> GetAllStreamKeys() const;
-
-	// ========================================
-	// RTSP Server
-	// ========================================
-
-	/**
-	 * Get RTSP URL for stream
-	 * @param StreamKey Stream key to query
-	 * @return RTSP URL (e.g., "rtsp://localhost:8554/iris_0/fpv")
-	 */
-	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming")
-	FString GetRTSPURL(const FStreamKey& StreamKey) const;
-
-	/**
-	 * Get RTSP server port
-	 */
-	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming")
-	int32 GetRTSPPort() const;
-
-	/**
-	 * Set RTSP server port (must be called before RTSP server starts)
-	 * @param Port New RTSP port (1024-65535)
-	 * @return True if port was set successfully
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	bool SetRTSPPort(int32 Port);
-
-	/**
-	 * Check if RTSP server is running
-	 */
-	UFUNCTION(BlueprintPure, Category = "RealGazebo|Streaming")
+	/** Is RTSP server running? */
+	UFUNCTION(BlueprintPure, Category = "RealGazebo Streaming")
 	bool IsRTSPServerRunning() const;
 
-	// ========================================
+	//----------------------------------------------------------
+	// Stream Management
+	//----------------------------------------------------------
+
+	/**
+	 * Create stream for camera component.
+	 * Uses default configuration set by ARealGazeboStreamingManager (Resolution + FPS).
+	 * All cameras get the SAME configuration for consistency.
+	 *
+	 * @param Camera - Vehicle camera component
+	 * @return True if stream created successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo Streaming")
+	bool CreateStream(UVehicleCameraComponent* Camera);
+
+	/**
+	 * Create stream with custom configuration.
+	 *
+	 * @param Camera - Vehicle camera component
+	 * @param Config - Stream configuration
+	 * @return True if stream created successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo Streaming")
+	bool CreateStreamWithConfig(UVehicleCameraComponent* Camera, const FStreamConfig& Config);
+
+	/**
+	 * Destroy stream.
+	 *
+	 * @param StreamID - Stream identifier
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo Streaming")
+	void DestroyStream(const FStreamIdentifier& StreamID);
+
+	/** Destroy all active streams */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo Streaming")
+	void DestroyAllStreams();
+
+	//----------------------------------------------------------
+	// Camera Registration
+	//----------------------------------------------------------
+
+	/** Register camera component (called by component's BeginPlay) */
+	void RegisterCamera(UVehicleCameraComponent* Camera);
+
+	/** Unregister camera component (called by component's EndPlay) */
+	void UnregisterCamera(UVehicleCameraComponent* Camera);
+
+	//----------------------------------------------------------
+	// Query
+	//----------------------------------------------------------
+
+	/** Get stream info */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo Streaming")
+	FStreamInfo GetStreamInfo(const FStreamIdentifier& StreamID) const;
+
+	/** Get all active stream identifiers */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo Streaming")
+	TArray<FStreamIdentifier> GetActiveStreams() const;
+
+	/** Get number of active streams */
+	UFUNCTION(BlueprintPure, Category = "RealGazebo Streaming")
+	int32 GetActiveStreamCount() const;
+
+	/** Get all registered cameras (not yet streaming) - C++ only */
+	TArray<TWeakObjectPtr<UVehicleCameraComponent>> GetRegisteredCameras() const { return RegisteredCameras; }
+
+	/** Get number of registered cameras (waiting to stream) */
+	UFUNCTION(BlueprintPure, Category = "RealGazebo Streaming")
+	int32 GetRegisteredCameraCount() const { return RegisteredCameras.Num(); }
+
+	//----------------------------------------------------------
 	// Configuration
-	// ========================================
+	//----------------------------------------------------------
 
-	/**
-	 * Update stream configuration
-	 * @param StreamKey Stream to update
-	 * @param NewConfig New configuration
-	 * @return True if updated successfully (stream must be stopped)
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	bool UpdateStreamConfig(const FStreamKey& StreamKey, const FRealGazeboStreamConfig& NewConfig);
+	/** Set default stream configuration (applied to new streams) */
+	UFUNCTION(BlueprintCallable, Category = "RealGazebo Streaming")
+	void SetDefaultStreamConfig(const FStreamConfig& Config);
 
-	/**
-	 * Get stream configuration
-	 * @param StreamKey Stream to query
-	 * @param OutConfig Receives configuration
-	 * @return True if stream exists
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-	bool GetStreamConfig(const FStreamKey& StreamKey, FRealGazeboStreamConfig& OutConfig) const;
+	/** Get default stream configuration */
+	UFUNCTION(BlueprintPure, Category = "RealGazebo Streaming")
+	FStreamConfig GetDefaultStreamConfig() const { return DefaultStreamConfig; }
 
-	// ========================================
-	// Internal API (C++ only)
-	// ========================================
+	//----------------------------------------------------------
+	// Events
+	//----------------------------------------------------------
 
-	/** Get shared frame pool */
-	TSharedPtr<FRealGazeboFramePool> GetFramePool() const { return FramePool; }
+	/** Broadcast when streaming system starts */
+	UPROPERTY(BlueprintAssignable, Category = "RealGazebo Streaming")
+	FOnStreamingStarted OnStreamingStarted;
 
-	/** Get scene capture component pool for reusable capture components */
-	TSharedPtr<class FRealGazeboSceneCapturePool> GetSceneCapturePool() const { return SceneCapturePool; }
+	/** Broadcast when streaming system stops */
+	UPROPERTY(BlueprintAssignable, Category = "RealGazebo Streaming")
+	FOnStreamingStopped OnStreamingStopped;
 
-	/** Get pipeline for stream key */
-	TSharedPtr<FRealGazeboStreamPipeline> GetPipeline(const FStreamKey& StreamKey) const;
+	/** Broadcast when a stream is created */
+	UPROPERTY(BlueprintAssignable, Category = "RealGazebo Streaming")
+	FOnStreamCreated OnStreamCreated;
 
-	/**
-	 * Check if stream supports GPU texture encoding (zero-copy path)
-	 * @param StreamKey Stream to check
-	 * @return True if encoder supports direct GPU texture input
-	 */
-	bool SupportsTextureEncoding(const FStreamKey& StreamKey) const;
+	/** Broadcast when a stream is destroyed */
+	UPROPERTY(BlueprintAssignable, Category = "RealGazebo Streaming")
+	FOnStreamDestroyed OnStreamDestroyed;
 
-	/**
-	 * Check if stream is experiencing backpressure (considers both encoding and RTSP queues)
-	 * @param StreamKey Stream to check
-	 * @return True if either encoding or RTSP queue is >75% full
-	 */
-	bool IsStreamBackpressured(const FStreamKey& StreamKey) const;
-
-	/**
-	 * Submit GPU texture frame directly to encoding thread (zero-copy path)
-	 * Only use if SupportsTextureEncoding() returns true
-	 * @param StreamKey Target stream
-	 * @param Texture GPU texture from RenderTarget
-	 * @param Timestamp Frame capture timestamp
-	 * @param FrameNumber Frame sequence number
-	 * @return True if enqueued successfully
-	 */
-	bool SubmitTextureFrame(const FStreamKey& StreamKey, FTexture2DRHIRef Texture,
-	                        int64 TimestampUs, uint64 FrameNumber);
-
-	/**
-	 * Update bitrate for stream dynamically (adaptive quality)
-	 * @param StreamKey Target stream
-	 * @param NewBitrateKbps New bitrate in kbps
-	 */
-	void UpdateStreamBitrate(const FStreamKey& StreamKey, int32 NewBitrateKbps);
-
-	/**
-	 * Request keyframe (I-frame) for stream
-	 * @param StreamKey Target stream
-	 */
-	void RequestKeyFrame(const FStreamKey& StreamKey);
+	/** Broadcast when encoding error occurs */
+	UPROPERTY(BlueprintAssignable, Category = "RealGazebo Streaming")
+	FOnEncodingError OnEncodingError;
 
 private:
-	/** Initialize worker threads */
-	void InitializeThreads();
+	//----------------------------------------------------------
+	// Internal
+	//----------------------------------------------------------
 
-	/** Shutdown worker threads */
-	void ShutdownThreads();
+	/** Tick all active streams (frame capture) - returns true to continue ticking */
+	bool TickStreams(float DeltaTime);
 
-	/** Initialize RTSP server */
-	bool InitializeRTSPServer();
+	/** Bind to world tick */
+	void BindToWorldTick();
 
-	/** Shutdown RTSP server */
-	void ShutdownRTSPServer();
+	/** Unbind from world tick */
+	void UnbindFromWorldTick();
 
-	/** Validate stream configuration */
-	bool ValidateStreamConfig(const FRealGazeboStreamConfig& Config, FString& OutErrorMessage) const;
+	//----------------------------------------------------------
+	// RTSP Server
+	//----------------------------------------------------------
 
-	/** Generate RTSP URL for stream key */
-	FString GenerateRTSPURL(const FStreamKey& StreamKey) const;
+	/** RTSP server (shared across all streams) */
+	TSharedPtr<FRTSPServerWrapper> RTSPServer;
 
-	/** Update pool capacities based on active camera/stream count */
-	void UpdatePoolCapacities();
+	//----------------------------------------------------------
+	// Active Streams (Per-Stream Isolation!)
+	//----------------------------------------------------------
 
-	// ========================================
-	// Member Variables
-	// ========================================
+	/** Active streaming pipelines (keyed by StreamID) */
+	TMap<FStreamIdentifier, TUniquePtr<FStreamingPipeline>> ActiveStreams;
 
-	/** Active stream pipelines (key = FStreamKey) */
-	TMap<FStreamKey, TSharedPtr<FRealGazeboStreamPipeline>> ActivePipelines;
+	/** Registered cameras (auto-started by ARealGazeboStreamingManager when RTSP server starts) */
+	TArray<TWeakObjectPtr<UVehicleCameraComponent>> RegisteredCameras;
 
-	/** Shared frame buffer pool */
-	TSharedPtr<FRealGazeboFramePool> FramePool;
+	//----------------------------------------------------------
+	// Configuration
+	//----------------------------------------------------------
 
-	/** SceneCapture2D component pool for reducing allocation overhead */
-	TSharedPtr<class FRealGazeboSceneCapturePool> SceneCapturePool;
+	/** Default stream configuration */
+	FStreamConfig DefaultStreamConfig;
 
-	/** Encoding thread (hardware encoding only) */
-	TSharedPtr<FRealGazeboEncodingThread> EncodingThread;
-	FRunnableThread* EncodingThreadHandle = nullptr;
+	//----------------------------------------------------------
+	// Tick Handle
+	//----------------------------------------------------------
 
-	/** RTSP thread (runs Live555 event loop) */
-	TSharedPtr<FRealGazeboRTSPThread> RTSPThread;
-	FRunnableThread* RTSPThreadHandle = nullptr;
-
-	/** RTSP server instance */
-	TSharedPtr<FRealGazeboRTSPServer> RTSPServer;
-
-	/** RTSP port */
-	int32 RTSPPort = 8554;
-
-	/** Subsystem initialized flag */
-	bool bIsInitialized = false;
-
-	/** Thread safety */
-	mutable FCriticalSection PipelineMapMutex;
+	/** Ticker delegate handle (FTSTicker returns FDelegateHandle in UE 5.1) */
+	FTSTicker::FDelegateHandle TickDelegateHandle;
 };

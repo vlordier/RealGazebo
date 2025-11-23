@@ -46,6 +46,10 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Bridge|Vehicle")
     uint8 VehicleType = 0;
 
+    /** Vehicle type name from DataTable (e.g., "x500", "iris") - used for RTSP URL generation */
+    UPROPERTY(BlueprintReadOnly, Category = "Bridge|Vehicle")
+    FString VehicleTypeName;
+
     //----------------------------------------------------------
     // Core Components
     //----------------------------------------------------------

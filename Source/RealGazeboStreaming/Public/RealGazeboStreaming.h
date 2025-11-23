@@ -11,56 +11,57 @@
 
 /**
  * RealGazeboStreaming Module
- * Hardware-accelerated H.264 video streaming via RTSP for vehicle camera feeds
  *
- * Architecture:
- * - GameInstanceSubsystem for persistence across level changes
- * - 2-thread pipeline: Game Thread -> Encoding Thread (Hardware) -> RTSP Thread
- * - Zero-copy GPU texture encoding with no CPU readback or color conversion
- * - Hardware encoding ONLY: NVENC for NVIDIA GPUs and AMF for AMD GPUs
- * - Direct GPU texture input via CUDA, Vulkan, or DirectX interop
- * - Frame pooling system to minimize memory allocations
- * - Adaptive quality with dynamic bitrate adjustment based on queue depth
- * - Live555-based RTSP server listening on port 8554
- * - Multi-camera support per vehicle using camera identifiers
+ * Provides zero-copy GPU-based H.264 RTSP streaming for multi-camera vehicle streaming
+ * with ultra-low latency. Integrates with RealGazeboBridge for vehicle lifecycle management.
  *
- * System Requirements:
- * - NVIDIA GPU with NVENC support: GeForce GTX 600 series or newer, Quadro K-series or newer
- * - AMD GPU with AMF support: Radeon HD 7000 series or newer, GCN architecture or newer
- * - Software encoders are NOT supported, hardware acceleration is mandatory
+ * Key Features:
+ * - Hardware-accelerated encoding (NVENC/AMF)
+ * - Live555-based RTSP server (port 8554)
+ * - Zero-copy GPU texture encoding
+ * - Runtime configurable resolution/FPS/bitrate
+ * - Support for 8+ concurrent streams
+ * - Ultra-low latency (< 100ms end-to-end)
  *
- * Integration with RealGazeboBridge:
- * 1. Place ARealGazeboStreamManager actor in level (one per level)
- * 2. Add URealGazeboStreamingCamera component to vehicle blueprints
- * 3. Set CameraID property for each camera (REQUIRED) - e.g., "front", "right", "gimbal"
- * 4. Vehicle ID is automatically detected from VehicleBasePawn owner
- * 5. Streams auto-register and auto-start when vehicle spawns from PX4-Gazebo
+ * Usage:
+ * 1. Drag ARealGazeboStreamingManager into level
+ * 2. Configure RTSP port, max streams, quality settings
+ * 3. Add UVehicleCameraComponent to vehicle Blueprints
+ * 4. Streams auto-start when vehicles spawn
  *
- * RTSP URL Format (CameraID always required):
- * - Format: rtsp://localhost:8554/<vehicle_type_name>/<camera_id>
- * - Example: rtsp://localhost:8554/x500_0/front (front camera on first X500)
- * - Example: rtsp://localhost:8554/x500_0/right (right camera on first X500)
- * - Example: rtsp://localhost:8554/lc62_2/front (front camera on third LC62)
- *
- * Configuration:
- * - Users configure ONLY via StreamManager Blueprint actor (no console commands or .ini files)
- * - StreamManager settings: Resolution, Frame Rate, Aspect Ratio
- * - Auto-computed settings: Bitrate, GOP Size, H.264 Profile (Baseline for ultra-low latency)
+ * RTSP URL Format:
+ * - rtsp://localhost:8554/<vehicle_type_num>/<camera_id>
+ * - Example: rtsp://localhost:8554/x500_0/front
  */
-class REALGAZEBOSTREAMING_API FRealGazeboStreamingModule : public IModuleInterface
+class FRealGazeboStreamingModule : public IModuleInterface
 {
 public:
-	/** IModuleInterface implementation */ 
+	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
 
-	/** Get the module instance */
-	static FRealGazeboStreamingModule& Get();
+	/**
+	 * Singleton-like access to this module's interface. This is just for convenience!
+	 * Beware of calling this during the shutdown phase, though. Your module might have been unloaded already.
+	 *
+	 * @return Returns singleton instance, loading the module on demand if needed
+	 */
+	static inline FRealGazeboStreamingModule& Get()
+	{
+		return FModuleManager::LoadModuleChecked<FRealGazeboStreamingModule>("RealGazeboStreaming");
+	}
 
-	/** Check if the module is loaded */
-	static bool IsAvailable();
+	/**
+	 * Checks to see if this module is loaded and ready. It is only valid to call Get() if IsAvailable() returns true.
+	 *
+	 * @return True if the module is loaded and ready to use
+	 */
+	static inline bool IsAvailable()
+	{
+		return FModuleManager::Get().IsModuleLoaded("RealGazeboStreaming");
+	}
 
 private:
-	/** Module instance for singleton access */
-	static FRealGazeboStreamingModule* ModuleInstance;
+	/** Handle module cleanup on shutdown */
+	void OnModuleShutdown();
 };

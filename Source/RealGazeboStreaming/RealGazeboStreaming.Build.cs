@@ -4,7 +4,6 @@
 // Licensed under the BSD-3-Clause License.
 // See LICENSE file in the project root for full license information.
 
-
 using UnrealBuildTool;
 using System.IO;
 
@@ -12,29 +11,24 @@ public class RealGazeboStreaming : ModuleRules
 {
 	public RealGazeboStreaming(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-		// Public include paths (for module interface headers)
+		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+
 		PublicIncludePaths.AddRange(new string[]
 		{
 			Path.Combine(ModuleDirectory, "Public", "Core"),
-			Path.Combine(ModuleDirectory, "Public", "Encoding"),
+			Path.Combine(ModuleDirectory, "Public", "Camera"),
+			Path.Combine(ModuleDirectory, "Public", "Encoder"),
 			Path.Combine(ModuleDirectory, "Public", "RTSP"),
-			Path.Combine(ModuleDirectory, "Public", "Capture"),
-			Path.Combine(ModuleDirectory, "Public", "Pipeline"),
-			Path.Combine(ModuleDirectory, "Public", "Threading"),
-			Path.Combine(ModuleDirectory, "Public", "Utils")
+			Path.Combine(ModuleDirectory, "Public", "Pipeline")
 		});
 
-		// Private include paths (for implementation files)
 		PrivateIncludePaths.AddRange(new string[]
 		{
 			Path.Combine(ModuleDirectory, "Private", "Core"),
-			Path.Combine(ModuleDirectory, "Private", "Encoding"),
+			Path.Combine(ModuleDirectory, "Private", "Camera"),
+			Path.Combine(ModuleDirectory, "Private", "Encoder"),
 			Path.Combine(ModuleDirectory, "Private", "RTSP"),
-			Path.Combine(ModuleDirectory, "Private", "Capture"),
-			Path.Combine(ModuleDirectory, "Private", "Pipeline"),
-			Path.Combine(ModuleDirectory, "Private", "Threading"),
-			Path.Combine(ModuleDirectory, "Private", "Utils")
+			Path.Combine(ModuleDirectory, "Private", "Pipeline")
 		});
 
 		PublicDependencyModuleNames.AddRange(new string[]
@@ -42,60 +36,76 @@ public class RealGazeboStreaming : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"RenderCore",
 			"RHI",
-			"RHICore",
-			"Renderer",
-			"AVEncoder",       // UE5's hardware video encoding API (NVENC/AMF)
-			"Slate",
-			"SlateCore",
-			"DeveloperSettings",
-			"RealGazeboBridge" // For FVehicleID
+			"RenderCore",
+			"AVEncoder",
+			"Live555",
+			"RealGazeboBridge" // For FVehicleID, UGazeboBridgeSubsystem integration
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"Live555",         // RTSP/RTP streaming library
-			"VulkanRHI",       // Vulkan RHI (Linux + cross-platform texture interop)
-			"CUDA"             // CUDA module for NVENC texture interop
+			"Slate",
+			"SlateCore",
+			"DeveloperSettings",
+			"CUDA" // For NVENC support
 		});
 
-		// Platform-specific RHI and encoding modules
+		// Platform-specific encoder dependencies
+		if (Target.Platform == UnrealTargetPlatform.Win64 ||
+		    Target.Platform == UnrealTargetPlatform.Linux)
+		{
+			PrivateDependencyModuleNames.Add("VulkanRHI");
+			PublicIncludePathModuleNames.Add("Vulkan");
+		}
+
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
 			PrivateDependencyModuleNames.AddRange(new string[]
 			{
-				"D3D11RHI"     // DirectX 11 RHI is sufficient for NVENC and AMF hardware encoding on Windows
-				               // Important: D3D12RHI should not be added here as it is already included
-				               // in the AVEncoder module (lines 41-42). Adding it here will cause module conflicts.
+				"D3D11RHI",
+				"D3D12RHI"
 			});
 
-			PublicDefinitions.Add("REALGAZEBO_PLATFORM_WINDOWS=1");
+			AddEngineThirdPartyPrivateStaticDependencies(Target, "DX11", "DX12");
 		}
-		else if (Target.Platform == UnrealTargetPlatform.Linux)
+
+		if (Target.IsInPlatformGroup(UnrealPlatformGroup.Unix))
 		{
-			PublicDefinitions.Add("REALGAZEBO_PLATFORM_LINUX=1");
+			PrivateDependencyModuleNames.Add("VulkanRHI");
 		}
 
-		// CUDA module for NVENC hardware encoding (optional - checked at runtime)
-		// Only add if available to avoid build errors on systems without CUDA SDK
-		if (Target.Platform == UnrealTargetPlatform.Win64 ||
-		    Target.Platform == UnrealTargetPlatform.Linux)
+		// Build tool settings
+		if (Target.bBuildEditor)
 		{
-			// CUDA is optional - will be checked at runtime via FModuleManager::IsModuleLoaded("CUDA")
-			PublicDefinitions.Add("REALGAZEBO_CUDA_SUPPORT=1");
+			PrivateDependencyModuleNames.AddRange(new string[]
+			{
+				"EditorStyle",
+				"ToolMenus",
+				"Projects",
+				"UnrealEd"
+			});
 		}
 
-		// Enable SIMD optimizations
-		PublicDefinitions.Add("REALGAZEBO_SIMD_ENABLED=1");
+		// Module-specific defines
+		PublicDefinitions.AddRange(new string[]
+		{
+			"REALGAZEBO_STREAMING_ENABLED=1",
+			"RTSP_DEFAULT_PORT=8554",
+			"MAX_CONCURRENT_STREAMS=32",
+			"DEFAULT_FRAME_POOL_SIZE=3"
+		});
 
-		// Debug mode settings (always define, 0 or 1)
-		PublicDefinitions.Add("REALGAZEBO_STREAMING_DEBUG=" +
-			((Target.Configuration == UnrealTargetConfiguration.Debug ||
-			  Target.Configuration == UnrealTargetConfiguration.DebugGame) ? "1" : "0"));
+		// Debug defines
+		if (Target.Configuration == UnrealTargetConfiguration.Debug ||
+		    Target.Configuration == UnrealTargetConfiguration.DebugGame)
+		{
+			PublicDefinitions.Add("REALGAZEBO_STREAMING_DEBUG=1");
+		}
 
-		// Enable verbose logging in debug builds
-		PublicDefinitions.Add("REALGAZEBO_STREAMING_VERBOSE_LOGGING=" +
-			(Target.Configuration == UnrealTargetConfiguration.Debug ? "1" : "0"));
+		// Performance optimizations
+		OptimizeCode = CodeOptimization.InShippingBuildsOnly;
+		bEnableUndefinedIdentifierWarnings = false;
+		bEnableExceptions = false;
 	}
 }

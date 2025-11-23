@@ -36,7 +36,7 @@
 		{
 			"Name": "RealGazeboStreaming",
 			"Type": "Runtime",
-			"LoadingPhase": "PostEngineInit",
+			"LoadingPhase": "Default",
 			"PlatformAllowList": [ "Win64", "Linux" ]
 		}
 	],
