@@ -45,7 +45,7 @@ Hardware-accelerated H.264 video streaming via RTSP. Uses NVENC/AMF encoders for
 
 ## Key Features
 
-- **Multi-Vehicle Support** - Simultaneous simulation of 8+ heterogeneous vehicles (quadcopters, rovers, boats, VTOL)
+- **Multi-Vehicle Support** - Up to 256 instances per vehicle type (0-255 range). Tested with 8+ simultaneous heterogeneous vehicles (quadcopters, rovers, boats, VTOL)
 - **PX4 Integration** - Full compatibility with PX4 autopilot via Gazebo bridge
 - **RTSP Streaming** - Hardware-accelerated H.264 streaming at 30/60 FPS with < 100ms latency
 - **Zero-Copy Pipeline** - Direct GPU texture to NVENC encoding (no CPU memory copies)
