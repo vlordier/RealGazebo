@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 using UnrealBuildTool;
@@ -12,6 +12,10 @@ public class RealGazeboStreaming : ModuleRules
 	public RealGazeboStreaming(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+
+		// CRITICAL: Disable Unity builds to prevent BufferedPacket name collision
+		// between Live555 (MultiFramedRTPSource.hh) and Unreal (PacketHandler.h)
+		bUseUnity = false;
 
 		PublicIncludePaths.AddRange(new string[]
 		{

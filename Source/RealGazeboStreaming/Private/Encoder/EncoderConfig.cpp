@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #include "Encoder/EncoderConfig.h"
@@ -22,7 +22,7 @@ AVEncoder::FVideoEncoder::H264Profile FEncoderConfig::GetAVEncoderProfile() cons
 AVEncoder::FVideoEncoder::RateControlMode FEncoderConfig::GetRateControlMode() const
 {
 	// Use Constant Bitrate (CBR) for consistent, predictable latency
-	// CBR maintains steady bitrate → steady network usage → predictable latency
+	// CBR maintains steady bitrate -> steady network usage -> predictable latency
 	// Alternative VBR (Variable Bitrate) would give better quality but unpredictable latency
 	return bConstantBitrate
 		? AVEncoder::FVideoEncoder::RateControlMode::CBR

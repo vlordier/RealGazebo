@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -11,13 +11,14 @@
 #include "StreamingTypes.generated.h"
 
 //----------------------------------------------------------
-// Stream Resolution Presets (Optimized for Robotics/Industrial Cameras - 4:3 Aspect Ratio)
+// Stream Resolution Presets
+// Optimized for robotics and industrial cameras with 4:3 aspect ratio.
+// These resolutions are widely supported by machine vision cameras.
 //----------------------------------------------------------
 
 UENUM(BlueprintType)
 enum class EStreamResolution : uint8
 {
-	// Standard robotics camera resolutions (4:3 aspect ratio)
 	VGA_640x480      UMETA(DisplayName = "VGA 640x480"),
 	SVGA_800x600     UMETA(DisplayName = "SVGA 800x600"),
 	XGA_1024x768     UMETA(DisplayName = "XGA 1024x768"),
@@ -26,7 +27,9 @@ enum class EStreamResolution : uint8
 };
 
 //----------------------------------------------------------
-// Stream Frame Rate Presets (Ultra-Low-Latency Compatible)
+// Stream Frame Rate Presets
+// All frame rates are optimized for ultra-low-latency encoding.
+// Higher frame rates provide smoother video but require more bandwidth and GPU resources.
 //----------------------------------------------------------
 
 UENUM(BlueprintType)
@@ -39,8 +42,9 @@ enum class EStreamFrameRate : uint8
 };
 
 //----------------------------------------------------------
-// Encoder Preset (Latency vs Quality Trade-off)
-// All presets supported - choose based on stream count and latency requirements
+// Encoder Preset
+// Determines the latency-quality tradeoff for hardware encoding.
+// UltraLowLatency: Minimizes encoding delay (<16ms per frame), ideal for real-time applications.
 //----------------------------------------------------------
 
 UENUM(BlueprintType)
@@ -50,8 +54,9 @@ enum class EEncoderPreset : uint8
 };
 
 //----------------------------------------------------------
-// H264 Profile (Compatibility vs Quality)
-// All profiles supported - choose based on client device capabilities
+// H264 Profile
+// Determines codec compatibility and compression features.
+// Baseline: Maximum compatibility with all devices, including mobile clients.
 //----------------------------------------------------------
 
 UENUM(BlueprintType)
@@ -61,7 +66,10 @@ enum class EH264Profile : uint8
 };
 
 //----------------------------------------------------------
-// Encoder Type (Hardware Acceleration)
+// Encoder Type
+// Hardware encoder automatically detected based on available GPU.
+// NVENC: NVIDIA GPU hardware encoding (via CUDA on Linux, Direct3D on Windows).
+// AMF: AMD GPU hardware encoding (via Vulkan on Linux, Direct3D on Windows).
 //----------------------------------------------------------
 
 UENUM(BlueprintType)
@@ -74,20 +82,23 @@ enum class EEncoderType : uint8
 
 //----------------------------------------------------------
 // Stream State
+// Represents the current lifecycle state of a streaming pipeline.
 //----------------------------------------------------------
 
 UENUM(BlueprintType)
 enum class EStreamState : uint8
 {
-	Idle             UMETA(DisplayName = "Idle"),
-	Initializing     UMETA(DisplayName = "Initializing"),
-	Active           UMETA(DisplayName = "Active"),
-	Error            UMETA(DisplayName = "Error"),
-	Stopping         UMETA(DisplayName = "Stopping")
+	Idle             UMETA(DisplayName = "Idle"),             // Stream created but not started
+	Initializing     UMETA(DisplayName = "Initializing"),     // Encoder and RTSP session initializing
+	Active           UMETA(DisplayName = "Active"),           // Stream encoding and available for clients
+	Error            UMETA(DisplayName = "Error"),            // Stream encountered an error
+	Stopping         UMETA(DisplayName = "Stopping")          // Stream shutting down
 };
 
 //----------------------------------------------------------
-// Stream Identifier (Vehicle + Camera)
+// Stream Identifier
+// Uniquely identifies each camera stream by combining vehicle and camera IDs.
+// This identifier is used for stream registration, RTSP URL generation, and pipeline management.
 //----------------------------------------------------------
 
 USTRUCT(BlueprintType)
@@ -95,15 +106,15 @@ struct REALGAZEBOSTREAMING_API FStreamIdentifier
 {
 	GENERATED_BODY()
 
-	/** Vehicle identification (auto-populated from vehicle pawn) */
+	/** Vehicle identification - automatically populated from the owning vehicle pawn */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Identifier")
 	FVehicleID VehicleID;
 
-	/** Camera identifier (e.g., "front", "right", "left", "bottom", "fpv") */
+	/** Camera identifier - user-defined name such as "front", "right", "left", "bottom", "fpv" */
 	UPROPERTY(BlueprintReadWrite, Category = "Stream Identifier")
 	FString CameraID = TEXT("front");
 
-	/** Vehicle type name (e.g., "x500", "iris") - used in RTSP URL instead of numeric code */
+	/** Vehicle type name (e.g., "x500", "iris") - used in RTSP URLs for better readability */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Identifier")
 	FString VehicleTypeName;
 
@@ -113,18 +124,25 @@ struct REALGAZEBOSTREAMING_API FStreamIdentifier
 	FStreamIdentifier(const FVehicleID& InVehicleID, const FString& InCameraID, const FString& InVehicleTypeName)
 		: VehicleID(InVehicleID), CameraID(InCameraID), VehicleTypeName(InVehicleTypeName) {}
 
-	/** Convert to string format: vehicle_type_name_num/camera_id (e.g., x500_1/front) */
+	/**
+	 * Convert stream identifier to human-readable string format.
+	 * Format: vehicle_type_name_num/camera_id (e.g., "x500_1/front")
+	 * Falls back to numeric format if vehicle type name is not set.
+	 */
 	FString ToString() const
 	{
 		if (!VehicleTypeName.IsEmpty())
 		{
 			return FString::Printf(TEXT("%s_%d/%s"), *VehicleTypeName.ToLower(), VehicleID.VehicleNum, *CameraID);
 		}
-		// Fallback to numeric format if name not set
+		// Fallback: Use numeric vehicle type code when name is unavailable
 		return FString::Printf(TEXT("%s/%s"), *VehicleID.ToString(), *CameraID);
 	}
 
-	/** Get RTSP path segment (used in URL construction) */
+	/**
+	 * Get RTSP path segment for URL construction.
+	 * Returns the same format as ToString() for consistency.
+	 */
 	FString ToRTSPPath() const
 	{
 		return ToString();
@@ -147,7 +165,9 @@ struct REALGAZEBOSTREAMING_API FStreamIdentifier
 };
 
 //----------------------------------------------------------
-// Stream Configuration (Runtime Configurable)
+// Stream Configuration
+// User-configurable settings for video stream quality and performance.
+// Additional parameters like bitrate and GOP size are automatically calculated.
 //----------------------------------------------------------
 
 USTRUCT(BlueprintType)
@@ -155,22 +175,29 @@ struct REALGAZEBOSTREAMING_API FStreamConfig
 {
 	GENERATED_BODY()
 
-	/** Stream resolution preset (Default: XGA 1024x768 - optimal for robotics cameras) */
+	/** Stream resolution preset - default: XGA 1024x768 (optimal for robotics cameras) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stream Config")
 	EStreamResolution Resolution = EStreamResolution::XGA_1024x768;
 
-	/** Target frame rate */
+	/** Target frame rate - higher values provide smoother video but require more resources */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stream Config")
 	EStreamFrameRate FrameRate = EStreamFrameRate::FPS_30;
 
-	// Internal settings (hardcoded for ultra-low latency - not exposed to user)
-	// Bitrate: Auto-calculated based on resolution + FPS (see GetBitrate())
-	// GOP Size: Auto-calculated as FPS/2 for 0.5s keyframe interval (see GetGOPSize())
+	//----------------------------------------------------------
+	// Internal settings (not exposed to users)
+	// These are hardcoded for ultra-low latency streaming:
+	// - Bitrate: Auto-calculated based on resolution + FPS (see GetBitrate())
+	// - GOP Size: Auto-calculated as FPS/2 for 0.5s keyframe interval (see GetGOPSize())
+	//----------------------------------------------------------
 	EEncoderPreset Preset = EEncoderPreset::UltraLowLatency;
 	EH264Profile Profile = EH264Profile::Baseline;
 	bool bZeroCopy = true;
 
-	/** Get actual resolution */
+	/**
+	 * Get actual resolution dimensions in pixels.
+	 * @param OutWidth - Output width in pixels
+	 * @param OutHeight - Output height in pixels
+	 */
 	void GetResolution(int32& OutWidth, int32& OutHeight) const
 	{
 		switch (Resolution)
@@ -196,153 +223,194 @@ struct REALGAZEBOSTREAMING_API FStreamConfig
 				OutHeight = 1200;
 				break;
 			default:
-				// Default to XGA (optimal for robotics)
+				// Fallback: Default to XGA (optimal balance for robotics)
 				OutWidth = 1024;
 				OutHeight = 768;
 				break;
 		}
 	}
 
-	/** Get frame rate as integer */
+	/**
+	 * Get frame rate as integer value.
+	 * @return Frame rate in frames per second (defaults to 30 if invalid)
+	 */
 	int32 GetFrameRateValue() const
 	{
-		// Handle invalid/default case
 		if (FrameRate == EStreamFrameRate::Invalid)
 		{
-			return 30; // Default to 30 FPS
+			return 30; // Default: 30 FPS for reliable streaming
 		}
 		return static_cast<int32>(FrameRate);
 	}
 
-	/** Calculate optimal bitrate based on resolution and frame rate (in kbps) */
+	/**
+	 * Calculate optimal bitrate based on resolution and frame rate.
+	 * Bitrate is auto-calculated to balance quality and network bandwidth.
+	 * @return Bitrate in kilobits per second (kbps)
+	 */
 	int32 CalculateOptimalBitrate() const
 	{
-		// Base bitrates at 30fps (in kbps)
+		// Base bitrate values calibrated for 30 FPS (in kbps)
 		int32 BaseBitrate = 2000;
 
 		switch (Resolution)
 		{
 			case EStreamResolution::VGA_640x480:
-				BaseBitrate = 1000;
+				BaseBitrate = 1000;  // 640x480: Low bandwidth for remote/mobile viewing
 				break;
 			case EStreamResolution::SVGA_800x600:
-				BaseBitrate = 1500;
+				BaseBitrate = 1500;  // 800x600: Moderate quality
 				break;
 			case EStreamResolution::XGA_1024x768:
-				BaseBitrate = 2000;
+				BaseBitrate = 2000;  // 1024x768: Default balanced quality
 				break;
 			case EStreamResolution::SXGA_1280x960:
-				BaseBitrate = 4000;
+				BaseBitrate = 4000;  // 1280x960: High quality
 				break;
 			case EStreamResolution::UXGA_1600x1200:
-				BaseBitrate = 6000;
+				BaseBitrate = 6000;  // 1600x1200: Maximum quality
 				break;
 		}
 
-		// Scale by frame rate
+		// Apply frame rate multiplier to account for temporal complexity
 		float FPSMultiplier = 1.0f;
 		switch (FrameRate)
 		{
 			case EStreamFrameRate::Invalid:
-				FPSMultiplier = 1.0f; // Default to 30 FPS multiplier
+				FPSMultiplier = 1.0f;   // Default: 30 FPS baseline
 				break;
 			case EStreamFrameRate::FPS_15:
-				FPSMultiplier = 0.67f;  // 15 FPS: Less temporal data
+				FPSMultiplier = 0.67f;  // 15 FPS: Reduced temporal data
 				break;
 			case EStreamFrameRate::FPS_30:
-				FPSMultiplier = 1.0f;   // 30 FPS: Baseline
+				FPSMultiplier = 1.0f;   // 30 FPS: Baseline reference
 				break;
 			case EStreamFrameRate::FPS_60:
-				FPSMultiplier = 1.7f;   // 60 FPS: More temporal data (improved from 1.5x)
+				FPSMultiplier = 1.7f;   // 60 FPS: Increased temporal data
 				break;
 		}
 
 		return FMath::RoundToInt(BaseBitrate * FPSMultiplier);
 	}
 
-	/** Get bitrate in kilobits per second (auto-calculated) */
+	/**
+	 * Get encoder bitrate in kilobits per second.
+	 * This value is automatically calculated - users do not configure it directly.
+	 * @return Bitrate in kbps
+	 */
 	int32 GetBitrate() const
 	{
 		return CalculateOptimalBitrate();
 	}
 
-	/** Calculate optimal GOP size based on FPS (for 0.5 second keyframe interval) */
+	/**
+	 * Calculate optimal GOP (Group of Pictures) size for ultra-low latency.
+	 * GOP determines how often keyframes (I-frames) are inserted.
+	 * Smaller GOP = Lower latency + Faster client connection, but higher bandwidth.
+	 * Target: Keyframe every 0.5 seconds (GOP = FPS / 2).
+	 * @return GOP size in frames
+	 */
 	int32 CalculateOptimalGOPSize() const
 	{
-		// Target: Keyframe every 0.5 seconds for ultra-low latency
-		// GOP = FPS * 0.5
+		// Calculate GOP for 0.5 second keyframe interval
 		int32 TargetGOP = GetFrameRateValue() / 2;
 
-		// Clamp to reasonable range
+		// Clamp to safe range (minimum 5 for encoding stability, maximum 30 for latency)
 		return FMath::Clamp(TargetGOP, 5, 30);
 	}
 
-	/** Get GOP size (always auto-calculated as FPS/2 for 0.5s keyframe interval) */
+	/**
+	 * Get GOP size for encoder configuration.
+	 * Always auto-calculated as FPS/2 for 0.5 second keyframe intervals.
+	 * @return GOP size in frames
+	 */
 	int32 GetGOPSize() const
 	{
 		return CalculateOptimalGOPSize();
 	}
 
-	/** Get optimal frame pool size based on FPS (maintains ~130ms buffer) */
+	/**
+	 * Get optimal frame pool size for GPU texture reuse.
+	 * Pool size is calibrated to maintain approximately 130ms of buffering.
+	 * Larger pools reduce GPU memory allocation overhead.
+	 * @return Number of frames to keep in the reusable pool
+	 */
 	int32 GetFramePoolSize() const
 	{
 		const int32 FPS = GetFrameRateValue();
 
-		if (FPS <= 20) return 2;   // 15 FPS: 2 frames = 133ms
-		if (FPS <= 40) return 4;   // 30 FPS: 4 frames = 133ms
-		if (FPS <= 60) return 8;   // 60 FPS: 8 frames = 133ms
+		if (FPS <= 20) return 2;   // 15 FPS: 2 frames ~133ms buffer
+		if (FPS <= 40) return 4;   // 30 FPS: 4 frames ~133ms buffer
+		if (FPS <= 60) return 8;   // 60 FPS: 8 frames ~133ms buffer
 
-		return 8;  // Future-proof for higher FPS
+		return 8;  // Future-proof: Maximum pool size for higher frame rates
 	}
 
-	/** Get optimal frame queue size (2x pool size, maintains ~260ms buffer) */
+	/**
+	 * Get optimal frame queue size for encoder input buffering.
+	 * Queue is 2x the pool size to absorb encoder timing jitter (~260ms buffer).
+	 * Prevents frame drops when encoder experiences temporary delays.
+	 * @return Maximum number of frames queued for encoding
+	 */
 	int32 GetFrameQueueSize() const
 	{
 		const int32 PoolSize = GetFramePoolSize();
 
-		// Queue = 2x pool, absorbs encoder jitter
+		// Queue size: Double the pool size to absorb encoder jitter
 		int32 QueueSize = PoolSize * 2;
 
-		// Clamp to safe bounds
+		// Clamp to safe memory bounds (4-16 frames)
 		return FMath::Clamp(QueueSize, 4, 16);
 	}
 
-	/** Get optimal NAL queue size (1 second buffer for network jitter) */
+	/**
+	 * Get optimal NAL queue size for network buffering.
+	 * Maintains 1 second of encoded frames to handle network jitter and client lag.
+	 * Protects against temporary network congestion without dropping frames.
+	 * @return Maximum number of NAL units (encoded frames) in network queue
+	 */
 	int32 GetNALQueueSize() const
 	{
 		const int32 FPS = GetFrameRateValue();
 
-		// Target: 1 second of encoded frames
+		// Target: 1 second of encoded video
 		const float TargetSeconds = 1.0f;
 		int32 NALs = FMath::RoundToInt(FPS * TargetSeconds);
 
-		// Clamp to reasonable range
+		// Clamp to reasonable memory bounds (16-96 NAL units)
 		return FMath::Clamp(NALs, 16, 96);
 	}
 
-	/** Get maximum NAL unit size based on resolution (prevents I-frame rejection) */
+	/**
+	 * Get maximum allowed NAL unit size based on resolution.
+	 * Prevents rejection of large I-frames (keyframes) which can be substantial.
+	 * Values are calibrated from real-world measurements to include safety margin.
+	 * @return Maximum NAL unit size in bytes
+	 */
 	int32 GetMaxNALSizeBytes() const
 	{
-		// INCREASED: I-frames can be larger than expected at high quality
-		// Error logs showed XGA I-frames reaching 137KB - need generous margin
+		// Note: I-frame sizes measured in production showed XGA reaching 137KB
+		// Values include generous safety margin to prevent frame rejection
 		switch (Resolution)
 		{
 			case EStreamResolution::UXGA_1600x1200:
-				return 262144;  // 256 KB (very large I-frames at high res)
+				return 262144;  // 256 KB - Very large I-frames at maximum resolution
 			case EStreamResolution::SXGA_1280x960:
-				return 196608;  // 192 KB (large I-frames)
+				return 196608;  // 192 KB - Large I-frames at high resolution
 			case EStreamResolution::XGA_1024x768:
-				return 163840;  // 160 KB (XGA I-frames measured at 137KB)
+				return 163840;  // 160 KB - Measured at 137KB, margin for quality spikes
 			case EStreamResolution::SVGA_800x600:
-				return 131072;  // 128 KB (medium I-frames)
+				return 131072;  // 128 KB - Medium I-frames
 			default:
-				return 98304;   // 96 KB (small I-frames for VGA)
+				return 98304;   // 96 KB - Small I-frames for VGA resolution
 		}
 	}
 };
 
 //----------------------------------------------------------
-// Stream Information (Status & Metadata)
+// Stream Information
+// Runtime status and performance metrics for an active stream.
+// Read-only data exposed to Blueprint for monitoring and UI display.
 //----------------------------------------------------------
 
 USTRUCT(BlueprintType)
@@ -350,69 +418,85 @@ struct REALGAZEBOSTREAMING_API FStreamInfo
 {
 	GENERATED_BODY()
 
-	/** Stream identifier */
+	/** Unique stream identifier (vehicle + camera) */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	FStreamIdentifier StreamID;
 
-	/** RTSP URL for this stream */
+	/** RTSP URL for client connections (e.g., rtsp://localhost:8554/x500_1/front) */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	FString RTSPURL;
 
-	/** Current stream state */
+	/** Current lifecycle state of the stream */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	EStreamState State = EStreamState::Idle;
 
-	/** Current stream configuration */
+	/** Active stream configuration (resolution, FPS, encoding settings) */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	FStreamConfig Config;
 
-	/** Encoder type being used */
+	/** Hardware encoder being used (NVENC for NVIDIA, AMF for AMD) */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	EEncoderType EncoderType = EEncoderType::Unknown;
 
-	/** Number of currently connected RTSP clients */
+	/** Number of RTSP clients currently watching this stream */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	int32 ConnectedClients = 0;
 
-	/** Total frames encoded since stream start */
+	/** Total number of frames encoded since stream started */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	int64 TotalFramesEncoded = 0;
 
-	/** Current encoding frame rate (actual, may differ from target) */
+	/** Actual encoding frame rate (may differ from target due to performance) */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	float ActualFPS = 0.0f;
 
-	/** Average encoding time per frame (milliseconds) */
+	/** Average time to encode each frame in milliseconds */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	float AvgEncodingTimeMs = 0.0f;
 
-	/** Timestamp when stream was created */
+	/** Timestamp when this stream was created */
 	UPROPERTY(BlueprintReadOnly, Category = "Stream Info")
 	FDateTime CreatedTime;
 };
 
 //----------------------------------------------------------
 // Event Delegates
+// Blueprint-compatible delegates for streaming system events.
+// Use these to respond to stream lifecycle changes and errors.
 //----------------------------------------------------------
 
-// Called when streaming system starts
+/** Fired when the streaming subsystem starts and RTSP server is ready */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStreamingStarted);
 
-// Called when streaming system stops
+/** Fired when the streaming subsystem stops and RTSP server shuts down */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStreamingStopped);
 
-// Called when a new stream is created (VehicleID, CameraID, URL)
+/**
+ * Fired when a new stream is created and available for clients.
+ * @param VehicleID - Vehicle identification
+ * @param CameraID - Camera identifier (e.g., "front")
+ * @param RTSPURL - Full RTSP URL for client connections
+ */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnStreamCreated,
 	const FVehicleID&, VehicleID,
 	const FString&, CameraID,
 	const FString&, RTSPURL);
 
-// Called when a stream is destroyed (VehicleID, CameraID)
+/**
+ * Fired when a stream is destroyed and no longer available.
+ * @param VehicleID - Vehicle identification
+ * @param CameraID - Camera identifier
+ */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStreamDestroyed,
 	const FVehicleID&, VehicleID,
 	const FString&, CameraID);
 
-// Called when an encoding error occurs (VehicleID, CameraID, ErrorMessage)
+/**
+ * Fired when an encoding error occurs during stream operation.
+ * @param VehicleID - Vehicle identification
+ * @param CameraID - Camera identifier
+ * @param ErrorMessage - Description of the error
+ */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnEncodingError,
 	const FVehicleID&, VehicleID,
 	const FString&, CameraID,

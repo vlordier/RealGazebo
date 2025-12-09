@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -13,48 +13,62 @@
 /**
  * FPooledFrame
  *
- * Represents a single GPU texture frame in the pool.
- * Contains the RHI texture resource and metadata for tracking usage.
+ * Represents a single reusable GPU texture frame in the pool.
+ * Contains the RHI texture resource along with metadata for tracking usage and timing.
  *
- * Key Features:
- * - GPU texture (RHI-agnostic - works with D3D11/D3D12/Vulkan)
- * - In-use tracking flag
- * - Frame timestamp
- * - Automatic cleanup on destruction
+ * Memory Management:
+ * - GPU texture allocated once during pool initialization
+ * - Reused many times throughout the stream's lifetime
+ * - Automatic cleanup via FTexture2DRHIRef smart pointer
+ *
+ * Usage Tracking:
+ * - bInUse flag: Atomic boolean prevents simultaneous use by multiple frames
+ * - AcquireTime: Tracks when frame was last acquired (for debugging stalls)
+ * - FrameNumber: Sequence number for debugging and ordering
+ *
+ * Platform Compatibility:
+ * - RHI-agnostic: Works with Direct3D 11, Direct3D 12, Vulkan
+ * - Texture format: RGBA8 (4 bytes per pixel, 8 bits per channel)
  */
 struct FPooledFrame
 {
-	/** GPU texture resource (2D, RGBA8) */
+	/** GPU texture resource - RHI reference ensures automatic cleanup */
 	FTexture2DRHIRef Texture;
 
-	/** Frame number (for debugging/ordering) */
+	/** Sequential frame number assigned when acquired (for debugging) */
 	uint64 FrameNumber = 0;
 
-	/** Timestamp when frame was acquired */
+	/** Timestamp when this frame was last acquired from the pool */
 	double AcquireTime = 0.0;
 
-	/** Is this frame currently in use by encoder? */
+	/** Atomic flag: Is this frame currently in use by the encoder? */
 	std::atomic<bool> bInUse{false};
 
-	/** Frame width */
+	/** Texture width in pixels */
 	int32 Width = 0;
 
-	/** Frame height */
+	/** Texture height in pixels */
 	int32 Height = 0;
 
 	/** Default constructor */
 	FPooledFrame() = default;
 
-	/** Check if frame is valid */
+	/**
+	 * Check if this pooled frame is valid and ready for use.
+	 * @return True if texture is allocated and has valid dimensions
+	 */
 	bool IsValid() const
 	{
 		return Texture.IsValid() && Width > 0 && Height > 0;
 	}
 
-	/** Get memory size in bytes */
+	/**
+	 * Calculate GPU memory size used by this texture.
+	 * @return Memory size in bytes (Width x Height x 4 for RGBA8)
+	 */
 	uint64 GetMemorySize() const
 	{
-		// RGBA8 = 4 bytes per pixel
+		// RGBA8 format = 4 bytes per pixel (8 bits per channel x 4 channels)
 		return static_cast<uint64>(Width) * Height * 4;
 	}
 };
@@ -62,23 +76,37 @@ struct FPooledFrame
 /**
  * FFramePool
  *
- * Per-stream GPU texture pool for zero-copy encoding.
- * Pre-allocates a small number of GPU textures and reuses them.
+ * Per-stream GPU texture pool that enables efficient zero-copy encoding by reusing
+ * a small set of pre-allocated GPU textures. Eliminates the overhead of allocating
+ * and deallocating GPU memory for every frame.
  *
- * CRITICAL: Each stream MUST have its own isolated pool - never share!
+ * CRITICAL ISOLATION REQUIREMENT:
+ * Each stream MUST have its own isolated pool. Never share pools between streams as
+ * this would cause texture access conflicts when streams render and encode in parallel.
  *
  * Design Principles:
- * - Small pool size (3 frames) for low latency
- * - Thread-safe acquire/release
- * - Automatic texture creation on-demand
- * - GPU fence synchronization support
- * - No CPU readback (zero-copy)
+ * - Small pool size: Default 3 frames (~100ms buffer at 30 FPS) minimizes latency
+ * - Thread-safe operations: Acquire/release can be called from different threads
+ * - Lazy allocation: Textures created on render thread during Initialize()
+ * - Zero-copy guarantee: Textures never leave GPU memory
+ * - Automatic cleanup: Smart pointers manage texture lifetime
  *
- * Pool States:
- * - Empty: No textures allocated yet
- * - Initializing: Allocating textures
- * - Ready: Textures available for use
- * - Full: All textures in use (blocks until one is released)
+ * Memory Efficiency:
+ * - Pre-allocation eliminates per-frame allocation overhead
+ * - Texture reuse reduces GPU memory fragmentation
+ * - Small pool size keeps GPU memory footprint minimal
+ * - Example: 1024x768 RGBA8 x 3 frames = ~9 MB GPU memory
+ *
+ * Pool State Machine:
+ * - Empty: No textures allocated (initial state)
+ * - Initializing: Allocating GPU textures on render thread
+ * - Ready: Textures available for capture and encoding
+ * - Exhausted: All frames in use (AcquireFrame blocks until release)
+ * - Shutdown: Releasing all GPU resources
+ *
+ * Blocking Behavior:
+ * If all frames are in use, AcquireFrame() blocks the calling thread with a timeout.
+ * This should rarely happen with proper pool sizing (pool size = ~130ms buffer).
  */
 class FFramePool
 {
@@ -104,20 +132,31 @@ public:
 	//----------------------------------------------------------
 
 	/**
-	 * Acquire a free frame from the pool.
-	 * Blocks if all frames are in use (should rarely happen with pool size = 3).
+	 * Acquire a free frame from the pool for capture or encoding.
+	 * Blocks the calling thread if all frames are currently in use, waiting up to
+	 * TimeoutSeconds for a frame to become available.
 	 *
-	 * @param OutFrame - Acquired frame (nullptr if failed)
-	 * @param TimeoutSeconds - Max time to wait for a frame (default 0.1s)
-	 * @return True if frame acquired, false if timeout
+	 * Under normal operation, this should return immediately as the pool is sized to
+	 * maintain a ~130ms buffer. Blocking only occurs if encoding falls behind rendering.
+	 *
+	 * Thread Safety: Can be called from game thread (capture) or render thread
+	 *
+	 * @param OutFrame - Output frame reference (set to valid frame if successful)
+	 * @param TimeoutSeconds - Maximum time to wait for a free frame (default 0.1s = 100ms)
+	 * @return True if frame acquired successfully, false if timeout or shutdown
 	 */
 	bool AcquireFrame(TSharedPtr<FPooledFrame>& OutFrame, double TimeoutSeconds = 0.1);
 
 	/**
-	 * Release a frame back to the pool for reuse.
-	 * Thread-safe - can be called from encoder thread.
+	 * Release a frame back to the pool after encoding completes.
+	 * Marks the frame as no longer in use, making it available for the next capture.
 	 *
-	 * @param Frame - Frame to release
+	 * This is typically called by the encoding thread after the hardware encoder
+	 * finishes reading the texture data.
+	 *
+	 * Thread Safety: Can be called from any thread (typically encoding thread)
+	 *
+	 * @param Frame - Frame to release back to the pool
 	 */
 	void ReleaseFrame(TSharedPtr<FPooledFrame> Frame);
 

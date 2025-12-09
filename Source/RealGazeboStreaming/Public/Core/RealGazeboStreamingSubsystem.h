@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -9,12 +9,14 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "StreamingTypes.h"
-#include "RealGazeboStreamingSubsystem.generated.h"
 
 // Forward declarations
 class UVehicleCameraComponent;
-class FStreamingPipeline;
 class FRTSPServerWrapper;
+class FStreamingPipeline;
+
+// CRITICAL: .generated.h MUST be the last #include in header
+#include "RealGazeboStreamingSubsystem.generated.h"
 
 /**
  * URealGazeboStreamingSubsystem
@@ -31,7 +33,7 @@ class FRTSPServerWrapper;
  * Architecture:
  * - One RTSP server (shared, runs on background thread)
  * - Multiple streaming pipelines (one per stream, fully isolated)
- * - Each pipeline: Capture → Pool → Encoder → Thread → NAL → RTSP
+ * - Each pipeline: Capture -> Pool -> Encoder -> Thread -> NAL -> RTSP
  */
 UCLASS()
 class REALGAZEBOSTREAMING_API URealGazeboStreamingSubsystem : public UGameInstanceSubsystem
@@ -199,7 +201,7 @@ private:
 	//----------------------------------------------------------
 
 	/** Active streaming pipelines (keyed by StreamID) */
-	TMap<FStreamIdentifier, TUniquePtr<FStreamingPipeline>> ActiveStreams;
+	TMap<FStreamIdentifier, TSharedPtr<FStreamingPipeline>> ActiveStreams;
 
 	/** Registered cameras (auto-started by ARealGazeboStreamingManager when RTSP server starts) */
 	TArray<TWeakObjectPtr<UVehicleCameraComponent>> RegisteredCameras;

@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #include "RealGazeboStreaming.h"
@@ -27,22 +27,9 @@ void FRealGazeboStreamingModule::StartupModule()
 
 void FRealGazeboStreamingModule::ShutdownModule()
 {
-	// This function may be called during shutdown to clean up your module.  For modules that support dynamic reloading,
-	// we call this function before unloading the module.
-
-	UE_LOG(LogTemp, Log, TEXT("RealGazeboStreaming: Module Shutting Down..."));
-
-	OnModuleShutdown();
-
+	// This function may be called during shutdown to clean up your module.
+	// Subsystems and actors cleanup themselves automatically via their own Deinitialize/Shutdown methods.
 	UE_LOG(LogTemp, Log, TEXT("RealGazeboStreaming: Module Shutdown Complete"));
-}
-
-void FRealGazeboStreamingModule::OnModuleShutdown()
-{
-	// Cleanup module-specific resources
-	// Note: Subsystems and actors cleanup themselves automatically
-
-	UE_LOG(LogTemp, Log, TEXT("RealGazeboStreaming: Cleaning up module resources"));
 }
 
 #undef LOCTEXT_NAMESPACE

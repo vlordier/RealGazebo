@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -10,39 +10,44 @@
 #include "StreamingTypes.h"
 #include "HardwareEncoderWrapper.h"
 
-// Live555 includes
-#include "FramedSource.hh"
-#include "UsageEnvironment.hh"
+// Forward declaration for Live555 types
+// Note: Live555 headers are only included in .cpp to prevent header pollution
+class UsageEnvironment;
 
 /**
  * FH264StreamSource
  *
  * Per-stream H.264 NAL unit source for Live555 RTSP server.
+ * Acts as the bridge between the hardware encoder output and the RTSP network stream.
  *
+ * ========================================
  * CRITICAL FIX FOR STREAM CROSSTALK
+ * ========================================
  *
- * OLD IMPLEMENTATION (BROKEN):
- * - Used static TMap<FStreamKey, NALQueue> → All streams shared same map
- * - Single global mutex → Blocking/latency
- * - FStreamKey collisions → Stream A's data ends up in Stream B
+ * BROKEN IMPLEMENTATION (Old):
+ * - Used static TMap<FStreamKey, NALQueue> shared by ALL streams
+ * - Single global mutex caused blocking and latency across streams
+ * - FStreamKey collisions caused Stream A's frames to appear in Stream B
+ * - Result: Gray screens, corrupted video, frame mixing between streams
  *
- * NEW IMPLEMENTATION (FIXED):
- * - Each instance has its OWN private NAL queue (not static!)
- * - Each instance has its OWN private mutex (no global contention!)
- * - Unique FStreamIdentifier prevents collisions
- * - Complete stream isolation guaranteed
+ * FIXED IMPLEMENTATION (Current):
+ * - Each instance has its OWN private NAL queue (PrivateNALQueue member variable)
+ * - Each instance has its OWN private mutex (PrivateMutex member variable)
+ * - Unique FStreamIdentifier prevents any possibility of collision
+ * - Complete isolation: No shared state between streams
+ * - Result: Perfect video quality, zero crosstalk
  *
  * Features:
- * - Per-instance NAL queue (TQueue<FEncodedNALUnit>)
- * - Per-instance mutex (FCriticalSection)
- * - SPS/PPS storage and injection before keyframes
- * - 64KB NAL size limit (not 512KB)
- * - Mid-stream join support (clients get SPS/PPS on next keyframe)
+ * - Per-instance NAL queue (TQueue<FEncodedNALUnit>) - NOT STATIC
+ * - Per-instance mutex (FCriticalSection) - NOT GLOBAL
+ * - SPS/PPS storage: Codec parameters cached and re-injected for mid-stream joins
+ * - NAL size limit: Resolution-aware (64KB for VGA, 256KB for UXGA)
+ * - Mid-stream join support: New clients receive SPS/PPS before next keyframe
  *
- * Integration with Live555:
- * - Inherits from Live555's FramedSource
- * - doGetNextFrame() called by Live555 to fetch NAL data
- * - deliverFrame() delivers NAL data to Live555's output buffer
+ * Live555 Integration:
+ * - Implements Live555's FramedSource interface via FLive555H264Source wrapper
+ * - doGetNextFrame(): Live555 calls this to request next NAL unit
+ * - deliverFrame(): Called internally to deliver NAL data to Live555's output buffer
  */
 class FH264StreamSource
 {
@@ -93,9 +98,9 @@ public:
 	 * Create Live555 FramedSource for this stream.
 	 * Live555 will call this source to fetch NAL data.
 	 *
-	 * @return FramedSource instance (managed by Live555)
+	 * @return FramedSource instance (managed by Live555) - opaque pointer
 	 */
-	FramedSource* CreateFramedSource();
+	void* CreateFramedSource();
 
 	/**
 	 * Generate SDP lines for RTSP DESCRIBE response.
@@ -245,30 +250,4 @@ private:
 
 	/** Maximum NAL unit size in bytes (resolution-aware, prevents I-frame rejection) */
 	int32 MaxNALSizeBytes;
-};
-
-/**
- * FLive555H264Source
- *
- * Live555 FramedSource wrapper for FH264StreamSource.
- * This is the actual Live555-compatible class that fetches NAL data.
- */
-class FLive555H264Source : public FramedSource
-{
-public:
-	static FLive555H264Source* CreateNew(UsageEnvironment& Env, FH264StreamSource* StreamSource);
-
-protected:
-	FLive555H264Source(UsageEnvironment& Env, FH264StreamSource* StreamSource);
-	virtual ~FLive555H264Source();
-
-	// Live555 interface
-	virtual void doGetNextFrame() override;
-
-private:
-	static void DeliverFrameStub(void* ClientData);
-	void DeliverFrame();
-
-	FH264StreamSource* H264Source;
-	FEncodedNALUnit CurrentNAL;
 };

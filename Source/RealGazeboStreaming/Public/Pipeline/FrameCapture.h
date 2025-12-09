@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -19,38 +19,54 @@ class UTextureRenderTarget2D;
 /**
  * FCaptureFrame
  *
- * Represents a captured frame ready for encoding.
- * Contains pooled texture + GPU fence for synchronization.
+ * Represents a captured frame ready for encoding with GPU synchronization.
+ * Combines a pooled GPU texture with a GPU fence to ensure the render thread
+ * has completed writing to the texture before the encoder reads it.
+ *
+ * GPU Synchronization:
+ * The GPU fence ensures that:
+ * 1. Render thread finishes writing the frame texture
+ * 2. Encoding thread waits for fence signal before reading
+ * 3. No race conditions between rendering and encoding
+ * 4. Zero-copy pipeline maintained (no CPU involvement)
  */
 struct FCaptureFrame
 {
-	/** Pooled frame from the frame pool */
+	/** Pooled frame texture from the frame pool (reusable GPU memory) */
 	TSharedPtr<FPooledFrame> PooledFrame;
 
-	/** GPU fence for synchronization (per-stream, not shared!) */
+	/** GPU fence for render-to-encode synchronization (per-stream, isolated) */
 	FGPUFenceRHIRef GPUFence;
 
-	/** Frame timestamp (game thread time) */
+	/** Frame capture timestamp from game thread (for FPS calculation) */
 	double Timestamp = 0.0;
 
-	/** Frame number */
+	/** Sequential frame number for this stream */
 	uint64 FrameNumber = 0;
 
-	/** Is frame ready for encoding? (GPU fence signaled) */
+	/**
+	 * Check if frame is ready for encoding.
+	 * Returns true when GPU fence is signaled (rendering complete).
+	 * @return True if frame can be safely encoded
+	 */
 	bool IsReady() const
 	{
 		return PooledFrame && PooledFrame->IsValid() && GPUFence && GPUFence->Poll();
 	}
 
-	/** Wait for GPU fence (blocks until render thread completes) */
+	/**
+	 * Wait for GPU to finish rendering this frame.
+	 * Blocks the calling thread until the GPU fence is signaled.
+	 * Used by encoder thread before reading texture data.
+	 */
 	void WaitForGPU()
 	{
 		if (GPUFence)
 		{
-			// In UE 5.1, use Poll() in a loop to wait
+			// UE 5.1: Poll fence in a loop with small sleeps to avoid busy-waiting
 			while (!GPUFence->Poll())
 			{
-				FPlatformProcess::Sleep(0.001f); // 1ms sleep
+				FPlatformProcess::Sleep(0.001f); // 1ms sleep to yield CPU
 			}
 		}
 	}
@@ -59,22 +75,32 @@ struct FCaptureFrame
 /**
  * FFrameCapture
  *
- * Captures camera view to GPU texture for zero-copy encoding.
- * Each stream has its own isolated capture instance with dedicated GPU fence.
+ * Per-stream frame capture system that transfers rendered camera views to GPU textures
+ * for zero-copy hardware encoding. Each stream has its own isolated capture instance
+ * with a dedicated GPU fence to ensure proper render-to-encode synchronization.
  *
- * CRITICAL: Never share capture instances between streams!
+ * CRITICAL ISOLATION REQUIREMENT:
+ * Never share capture instances between streams. Each stream needs independent GPU fence
+ * synchronization to prevent race conditions when multiple streams render in parallel.
  *
- * Pipeline:
- * 1. SceneCaptureComponent2D renders to RenderTarget
- * 2. CopyTexture() transfers RenderTarget → PooledFrame texture (GPU only)
- * 3. InsertGPUFence() signals when copy completes
- * 4. Encoder waits for fence before encoding
+ * Capture Pipeline:
+ * 1. SceneCaptureComponent2D renders the camera view to a RenderTarget (Render Thread)
+ * 2. CopyTextureGPU() transfers RenderTarget -> PooledFrame texture (GPU-to-GPU copy)
+ * 3. InsertGPUFence() places a fence command in the GPU command buffer
+ * 4. GPU fence signals when rendering and copy operations complete
+ * 5. Encoder thread waits for fence before submitting texture to NVENC/AMF
  *
- * Zero-Copy Guarantee:
- * - All operations on GPU
- * - No CPU readback
- * - No intermediate buffers
- * - Direct RHI texture → Encoder texture
+ * Zero-Copy Architecture:
+ * - All operations occur entirely on the GPU (no CPU involvement)
+ * - No CPU readback or intermediate CPU buffers
+ * - Direct GPU memory flow: Render Target -> Pooled Texture -> Hardware Encoder
+ * - Minimizes latency and maximizes throughput
+ * - Reduces memory bandwidth usage
+ *
+ * Thread Safety:
+ * - CaptureFrame() called from game thread
+ * - GPU operations executed on render thread via ENQUEUE_RENDER_COMMAND
+ * - GPU fence provides synchronization between render and encoder threads
  */
 class FFrameCapture
 {
@@ -100,11 +126,18 @@ public:
 	//----------------------------------------------------------
 
 	/**
-	 * Capture current frame from SceneCaptureComponent2D to GPU texture.
+	 * Capture current frame from SceneCaptureComponent2D to a pooled GPU texture.
+	 * This is the main entry point called once per frame from the game thread.
 	 *
-	 * @param SceneCapture - The UE scene capture component
-	 * @param OutFrame - Captured frame (valid if returned true)
-	 * @return True if frame captured successfully
+	 * Process:
+	 * 1. Acquire a free frame from the pool
+	 * 2. Copy the scene capture's render target to the pooled texture (GPU-only)
+	 * 3. Insert GPU fence to signal when copy completes
+	 * 4. Return the captured frame for encoding
+	 *
+	 * @param SceneCapture - Unreal Engine scene capture component to capture from
+	 * @param OutFrame - Output captured frame with GPU fence (valid if return is true)
+	 * @return True if frame captured successfully, false if pool exhausted or error
 	 */
 	bool CaptureFrame(USceneCaptureComponent2D* SceneCapture, FCaptureFrame& OutFrame);
 

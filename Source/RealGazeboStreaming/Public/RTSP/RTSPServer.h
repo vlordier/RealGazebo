@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -10,7 +10,8 @@
 #include "StreamingTypes.h"
 #include "HAL/Runnable.h"
 
-// Forward declarations for Live555
+// Forward declarations for Live555 types
+// Note: These are in global namespace (Live555 library compiled without namespace)
 class RTSPServer;
 class UsageEnvironment;
 class TaskScheduler;
@@ -19,19 +20,27 @@ class ServerMediaSession;
 /**
  * FRTSPServerWrapper
  *
- * Wrapper for Live555 RTSP server.
- * Manages single RTSP server instance on specified port.
+ * Wrapper for Live555 RTSP server running on a dedicated background thread.
+ * Manages a single RTSP server instance on the specified port.
+ *
+ * SHARED vs ISOLATED:
+ * - The RTSP server itself is SHARED across all streams (single instance, single port)
+ * - Stream data (NAL queues, encoders) are ISOLATED per-stream (no sharing)
+ * - Streams register/unregister dynamically with the shared server
  *
  * Features:
- * - Runs on background thread (non-blocking)
- * - Supports multiple concurrent streams
- * - Dynamic stream addition/removal
- * - URL format: rtsp://localhost:PORT/vehicle_type_num/camera_id
+ * - Background thread: Non-blocking event loop using Live555's task scheduler
+ * - Multi-stream support: Handles multiple concurrent H.264 video streams
+ * - Dynamic management: Add/remove streams at runtime without restart
+ * - Standard RTSP: Compatible with VLC, FFmpeg, GStreamer, and all RTSP clients
+ *
+ * URL Format:
+ * rtsp://[host]:[port]/[vehicle_type]_[vehicle_num]/[camera_id]
  *
  * Example URLs:
- * - rtsp://localhost:8554/x500_0/front
- * - rtsp://localhost:8554/x500_0/bottom
- * - rtsp://localhost:8554/iris_1/fpv
+ * - rtsp://localhost:8554/x500_0/front (X500 vehicle #0, front camera)
+ * - rtsp://localhost:8554/x500_0/bottom (X500 vehicle #0, bottom camera)
+ * - rtsp://localhost:8554/iris_1/fpv (Iris vehicle #1, FPV camera)
  */
 class FRTSPServerWrapper : public FRunnable
 {

@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -24,30 +24,42 @@ using CUexternalMemory = CUextMemory_st*;
 /**
  * FCachedCUDATexture
  *
- * Cached CUDA resources for a single pooled texture.
- * Import once, reuse for all frames using that texture.
+ * Cached CUDA resources for a single pooled texture (NVIDIA GPUs on Linux only).
+ * Textures are imported once and reused for all frames to minimize overhead.
  *
- * CRITICAL FIX: Vulkan textures use VK_IMAGE_TILING_OPTIMAL which stores pixels
- * in a GPU-optimized swizzled pattern. When imported into CUDA via external memory,
- * the tiling is preserved and cannot be read linearly by NVENC.
+ * CRITICAL VULKAN TILING FIX:
+ * Vulkan uses VK_IMAGE_TILING_OPTIMAL which stores pixels in a GPU-optimized swizzled pattern
+ * for fast rendering. When imported into CUDA via external memory, this tiling is preserved
+ * but NVENC cannot read swizzled data - it requires linear memory layout.
  *
- * Solution: We create a LINEAR staging CUarray (not from external memory) and
- * copy from the tiled external array to the linear array using cuMemcpy2D.
- * NVENC receives the linear array which it can process correctly.
+ * Solution: Two-stage approach:
+ * 1. Import Vulkan texture to TiledArray (preserves swizzled layout)
+ * 2. Create LinearArray with linear memory layout
+ * 3. Use cuMemcpy2D to copy from TiledArray -> LinearArray
+ * 4. Feed LinearArray to NVENC for encoding
+ *
+ * This ensures NVENC receives correctly formatted linear memory it can process.
  */
 struct FCachedCUDATexture
 {
-	// --- External memory resources (tiled layout from Vulkan) ---
-	CUexternalMemory ExternalMemory = nullptr;
-	CUmipmappedArray MipArray = nullptr;
-	CUarray TiledArray = nullptr;  // Renamed: this is the TILED array from Vulkan
+	//----------------------------------------------------------
+	// External Memory Resources (Tiled Layout from Vulkan)
+	//----------------------------------------------------------
+	CUexternalMemory ExternalMemory = nullptr;  // Vulkan->CUDA memory handle
+	CUmipmappedArray MipArray = nullptr;         // Mipmap array wrapper
+	CUarray TiledArray = nullptr;                // Swizzled/tiled array from Vulkan
 
-	// --- Linear staging array (created via cuArrayCreate, NOT external) ---
-	CUarray LinearArray = nullptr;  // NEW: Linear array for NVENC input
+	//----------------------------------------------------------
+	// Linear Staging Array (Created via cuArrayCreate)
+	//----------------------------------------------------------
+	CUarray LinearArray = nullptr;  // Linear array for NVENC input (correct layout)
 
-	bool bValid = false;
-	int32 Width = 0;
-	int32 Height = 0;
+	//----------------------------------------------------------
+	// Metadata
+	//----------------------------------------------------------
+	bool bValid = false;   // Is this cache entry valid?
+	int32 Width = 0;       // Texture width in pixels
+	int32 Height = 0;      // Texture height in pixels
 };
 
 // Forward declarations
@@ -63,63 +75,78 @@ namespace AVEncoder
 /**
  * FEncodedNALUnit
  *
- * Represents a single encoded NAL unit ready for RTSP streaming.
- * Contains H.264 bitstream data + metadata.
+ * Represents a single encoded NAL (Network Abstraction Layer) unit ready for RTSP streaming.
+ * NAL units are the atomic packets of H.264 video, containing either video frames or codec metadata.
+ *
+ * NAL Unit Types:
+ * - Type 1-4: P-frames and B-frames (predictive/bi-directional frames)
+ * - Type 5: IDR frames (keyframes, complete independent frames)
+ * - Type 7: SPS (Sequence Parameter Set) - codec initialization data
+ * - Type 8: PPS (Picture Parameter Set) - frame-level codec parameters
  */
 struct FEncodedNALUnit
 {
-	/** NAL unit data (H.264 bitstream with start code 0x00000001) */
+	/** H.264 bitstream data with Annex-B start code (0x00000001) prefix */
 	TArray<uint8> Data;
 
-	/** NAL unit type (1=P-frame, 5=IDR/keyframe, 7=SPS, 8=PPS, etc.) */
+	/** NAL unit type extracted from H.264 header (1-5=frames, 7=SPS, 8=PPS) */
 	uint8 NALType = 0;
 
-	/** Is this a keyframe (IDR)? */
+	/** Is this a keyframe (IDR frame)? Keyframes can be decoded independently */
 	bool bIsKeyframe = false;
 
-	/** Presentation timestamp (PTS) in milliseconds */
+	/** Presentation timestamp in milliseconds - when this frame should be displayed */
 	uint64 TimestampMs = 0;
 
-	/** Frame number */
+	/** Sequential frame number since stream started */
 	uint64 FrameNumber = 0;
 
-	/** Get NAL unit size in bytes */
+	/** Get NAL unit size in bytes including start code */
 	int32 GetSize() const { return Data.Num(); }
 
-	/** Is this NAL unit valid? */
+	/** Is this NAL unit valid and ready for streaming? */
 	bool IsValid() const { return Data.Num() > 0; }
 
-	/** Is this SPS? */
+	/** Is this a Sequence Parameter Set (codec initialization)? */
 	bool IsSPS() const { return NALType == 7; }
 
-	/** Is this PPS? */
+	/** Is this a Picture Parameter Set (frame-level parameters)? */
 	bool IsPPS() const { return NALType == 8; }
 
-	/** Is this a slice (actual video data)? */
+	/** Is this a video slice (actual encoded frame data)? */
 	bool IsSlice() const { return NALType >= 1 && NALType <= 5; }
 };
 
 /**
  * FHardwareEncoderWrapper
  *
- * Per-stream isolated hardware encoder wrapper.
- * Wraps Unreal's AVEncoder API for NVENC/AMF encoding.
+ * Per-stream hardware video encoder wrapper using GPU acceleration.
+ * Wraps Unreal Engine's AVEncoder API to provide NVENC (NVIDIA) or AMF (AMD) encoding.
  *
- * CRITICAL: Each stream MUST have its own encoder instance!
- * Never share encoders between streams - causes state pollution.
+ * CRITICAL ISOLATION REQUIREMENT:
+ * Each stream MUST have its own dedicated encoder instance. Never share encoders between
+ * streams as this causes encoder state pollution, leading to corrupted frames and crosstalk.
+ *
+ * Supported Hardware:
+ * - NVENC: NVIDIA GPUs (GTX 1000+ series, all RTX cards)
+ *   - Windows: Direct3D 11/12 texture input
+ *   - Linux: CUDA texture input via Vulkan->CUDA interop
+ * - AMF: AMD GPUs (RX 400+ series, all Radeon 5000/6000/7000)
+ *   - Windows: Direct3D 11/12 texture input
+ *   - Linux: Vulkan texture input
  *
  * Features:
- * - Auto-detect NVENC (NVIDIA) or AMF (AMD)
- * - Zero-copy GPU encoding
- * - H.264 Baseline profile
- * - Ultra-low latency preset
- * - Outputs NAL units for RTSP streaming
+ * - Automatic GPU detection and encoder selection
+ * - Zero-copy GPU pipeline (texture never leaves GPU memory)
+ * - H.264 Baseline profile (maximum client compatibility)
+ * - Ultra-low latency preset (<16ms encoding time per frame)
+ * - Outputs NAL units ready for RTSP/RTP streaming
  *
  * Encoding Pipeline:
- * 1. Initialize() - Creates encoder, registers input format
- * 2. EncodeFrame() - Submits GPU texture to encoder
- * 3. GetEncodedData() - Retrieves encoded NAL units
- * 4. Shutdown() - Cleans up encoder resources
+ * 1. Initialize() - Detect GPU, create encoder, configure parameters
+ * 2. EncodeFrame() - Submit GPU texture to hardware encoder
+ * 3. GetEncodedData() - Retrieve encoded NAL units from output queue
+ * 4. Shutdown() - Stop encoder and release all GPU resources
  */
 class FHardwareEncoderWrapper
 {

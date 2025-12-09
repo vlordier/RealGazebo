@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -22,31 +22,33 @@ class FRTSPServerWrapper;
 /**
  * FStreamingPipeline
  *
- * Complete isolated streaming pipeline for ONE stream.
- * Orchestrates: Capture → Pool → Encode → NAL → RTSP
+ * Complete isolated streaming pipeline for a single camera stream.
+ * Orchestrates the full video pipeline: Capture -> Pool -> Encode -> NAL -> RTSP
  *
- * CRITICAL: Each stream has its OWN pipeline instance!
+ * CRITICAL DESIGN: Complete Per-Stream Isolation
+ * Each stream has its OWN dedicated instances of ALL components:
+ * - Frame Pool: Independent GPU texture pool (no sharing between streams)
+ * - Hardware Encoder: Dedicated NVENC/AMF instance (prevents state pollution)
+ * - Encoding Thread: Isolated background thread
+ * - NAL Queue: Separate H.264 packet queue (prevents frame crosstalk)
+ * - GPU Fence: Independent synchronization primitive
  *
- * This is the FIX for stream crosstalk:
- * - Each pipeline has its OWN frame pool (not shared)
- * - Each pipeline has its OWN encoder instance (not shared)
- * - Each pipeline has its OWN encoding thread (not shared)
- * - Each pipeline has its OWN NAL queue (not shared)
- * - Each pipeline has its OWN GPU fence (not shared)
+ * This isolation architecture is the FIX for stream crosstalk issues.
+ * Streams never share state or resources except the RTSP server itself.
  *
- * Components (All Per-Instance):
- * 1. FFramePool - GPU texture pool (3 frames)
- * 2. FFrameCapture - Captures scene to GPU texture
- * 3. FHardwareEncoderWrapper - NVENC/AMF encoder
- * 4. FEncodingThread - Background encoding thread
- * 5. FH264StreamSource - Live555 NAL source
+ * Pipeline Components (All Per-Instance):
+ * 1. FFramePool - Reusable GPU texture pool (~4 textures, ~130ms buffer)
+ * 2. FFrameCapture - Scene rendering to GPU texture with fence synchronization
+ * 3. FHardwareEncoderWrapper - NVENC (NVIDIA) or AMF (AMD) hardware encoder
+ * 4. FEncodingThread - Background worker thread for encoding operations
+ * 5. FH264StreamSource - Live555 RTSP source with NAL unit queue
  *
  * Lifecycle:
- * 1. Initialize() - Creates all components
- * 2. Start() - Begins encoding loop
- * 3. CaptureFrame() - Called every game tick
- * 4. Stop() - Stops encoding
- * 5. Shutdown() - Cleans up resources
+ * 1. Initialize() - Create and configure all components
+ * 2. Start() - Begin encoding loop and register with RTSP server
+ * 3. CaptureFrame() - Called every frame from game thread to capture scenes
+ * 4. Stop() - Stop encoding loop and unregister from RTSP server
+ * 5. Shutdown() - Clean up and release all resources
  */
 class FStreamingPipeline
 {
@@ -56,11 +58,11 @@ public:
 	//----------------------------------------------------------
 
 	/**
-	 * Constructor
+	 * Constructor - Creates an isolated pipeline for one camera stream.
 	 *
-	 * @param InStreamID - Unique stream identifier
-	 * @param InSceneCapture - UE scene capture component
-	 * @param InRTSPServer - Shared RTSP server (streams are isolated, server is shared)
+	 * @param InStreamID - Unique stream identifier (Vehicle + Camera)
+	 * @param InSceneCapture - Unreal Engine scene capture component for rendering
+	 * @param InRTSPServer - Shared RTSP server instance (pipelines are isolated, server is shared)
 	 */
 	FStreamingPipeline(const FStreamIdentifier& InStreamID,
 	                   USceneCaptureComponent2D* InSceneCapture,
@@ -192,38 +194,44 @@ private:
 	FString RTSPURL;
 
 	//----------------------------------------------------------
-	// Pipeline Components (ALL PER-INSTANCE - NOT SHARED!)
+	// Pipeline Components
+	// CRITICAL: ALL components are PER-INSTANCE - NEVER SHARED between streams!
 	//----------------------------------------------------------
 
 	/**
-	 * PER-STREAM frame pool
-	 * Each stream has its own isolated GPU texture pool.
-	 * NOTE: Must be TSharedPtr (not TUniquePtr) because it's shared with
-	 * FFrameCapture and FEncodingThread for frame release after encoding.
+	 * Frame Pool (Per-Stream)
+	 * GPU texture pool for this stream only. Maintains ~4 reusable textures to reduce allocation overhead.
+	 * Uses TSharedPtr (not TUniquePtr) because FFrameCapture and FEncodingThread need shared access
+	 * for coordinated frame release after encoding completes.
 	 */
 	TSharedPtr<FFramePool> FramePool;
 
 	/**
-	 * PER-STREAM frame capture
-	 * Each stream has its own capture instance with isolated GPU fence.
+	 * Frame Capture (Per-Stream)
+	 * Renders scene to GPU texture with dedicated GPU fence for synchronization.
+	 * Each stream has independent capture instance to prevent interference.
 	 */
 	TUniquePtr<FFrameCapture> FrameCapture;
 
 	/**
-	 * PER-STREAM hardware encoder
-	 * Each stream has its own NVENC/AMF encoder instance.
+	 * Hardware Encoder (Per-Stream)
+	 * Dedicated NVENC (NVIDIA) or AMF (AMD) encoder instance.
+	 * Never shared between streams to prevent encoder state pollution and crosstalk.
+	 * Uses TSharedPtr for safe access from encoding thread.
 	 */
 	TSharedPtr<FHardwareEncoderWrapper> HardwareEncoder;
 
 	/**
-	 * PER-STREAM encoding thread
-	 * Each stream has its own background thread.
+	 * Encoding Thread (Per-Stream)
+	 * Isolated background worker thread for encoding operations.
+	 * Each stream has its own thread to enable parallel encoding across multiple streams.
 	 */
 	TUniquePtr<FEncodingThread> EncodingThread;
 
 	/**
-	 * PER-STREAM H.264 source
-	 * Each stream has its own NAL queue (not static shared!).
+	 * H.264 Stream Source (Per-Stream)
+	 * Live555 RTSP source with dedicated NAL unit queue.
+	 * CRITICAL: Each stream has its own queue (NOT a static shared queue) to prevent frame crosstalk.
 	 */
 	TUniquePtr<FH264StreamSource> H264Source;
 

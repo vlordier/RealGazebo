@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #include "Encoder/HardwareEncoderWrapper.h"
@@ -140,11 +140,30 @@ bool FHardwareEncoderWrapper::CreateHardwareEncoder(FString& OutErrorMessage)
 	}
 	else if (RHIType == ERHIInterfaceType::D3D12)
 	{
+		// IMPORTANT: On Windows D3D12 with NVIDIA GPUs, NVENC requires a D3D11 device
+		// for encoding. This means we MUST use IsShared=true to create a D3D11 intermediate
+		// device that NVENC can use.
+		//
+		// UE5.1 BUG WORKAROUND:
+		// When IsShared=true, there's a bug where pooled input frames don't properly clear
+		// D3D12.Texture before reuse, causing check(D3D12.Texture == nullptr) to fail.
+		//
+		// Solution: Use IsShared=true (required for NVENC) and set MaxNumBuffers=1 to
+		// prevent frame pooling/reuse. Each encoding will create a new frame, avoiding
+		// the assertion failure.
 		VideoEncoderInput = AVEncoder::FVideoEncoderInput::CreateForD3D12(
 			GDynamicRHI->RHIGetNativeDevice(),
 			true,  // IsResizable
-			IsRHIDeviceNVIDIA()  // IsShared (for NVIDIA compatibility)
+			true   // IsShared - MUST be true for NVENC (needs D3D11 device)
 		);
+
+		// CRITICAL: Set MaxNumBuffers=1 to prevent frame reuse bug
+		// This avoids the check(D3D12.Texture == nullptr) assertion failure
+		if (VideoEncoderInput.IsValid())
+		{
+			VideoEncoderInput->SetMaxNumBuffers(1);
+			UE_LOG(LogTemp, Log, TEXT("HardwareEncoderWrapper: D3D12 shared mode with MaxNumBuffers=1 (NVENC workaround)"));
+		}
 	}
 	else if (RHIType == ERHIInterfaceType::Vulkan)
 	{
@@ -630,7 +649,23 @@ bool FHardwareEncoderWrapper::EncodeFrame(FRHITexture* Texture, uint64 FrameNumb
 		return false;
 	}
 
-	// Obtain input frame from VideoEncoderInput (NOT from encoder!)
+	// Get RHI type once (used for D3D12 workaround and texture setting)
+	const ERHIInterfaceType RHIType = RHIGetInterfaceType();
+
+	// WINDOWS D3D12 WORKAROUND:
+	// UE5.1 has a bug where pooled input frames don't clear D3D12.Texture on reuse,
+	// causing check(D3D12.Texture == nullptr) assertion failure at VideoEncoderInput.cpp:879.
+	// Workaround: Flush the input pool before obtaining a frame to force creation of new frames.
+	// This is less efficient but necessary for correctness on Windows D3D12 + NVENC.
+#if PLATFORM_WINDOWS
+	if (RHIType == ERHIInterfaceType::D3D12)
+	{
+		// Flush to discard any pooled frames that have stale D3D12.Texture pointers
+		VideoEncoderInput->Flush();
+	}
+#endif
+
+	// Obtain input frame from VideoEncoderInput
 	TSharedPtr<AVEncoder::FVideoEncoderInputFrame> InputFrame = VideoEncoderInput->ObtainInputFrame();
 	if (!InputFrame.IsValid())
 	{
@@ -658,49 +693,56 @@ bool FHardwareEncoderWrapper::EncodeFrame(FRHITexture* Texture, uint64 FrameNumb
 	InputFrame->SetFrameID(FrameNumber);
 
 	// Set texture based on RHI type and encoding mode
-	const ERHIInterfaceType RHIType = RHIGetInterfaceType();
+	// Note: RHIType already declared above for D3D12 workaround
+	bool bTextureSet = false;
 #if PLATFORM_WINDOWS
 	if (RHIType == ERHIInterfaceType::D3D11)
 	{
 		ID3D11Texture2D* D3D11Texture = static_cast<ID3D11Texture2D*>(Texture->GetNativeResource());
 		InputFrame->SetTexture(D3D11Texture, [](ID3D11Texture2D*){ /* Texture release callback */ });
+		bTextureSet = true;
 	}
 	else if (RHIType == ERHIInterfaceType::D3D12)
 	{
 		ID3D12Resource* D3D12Resource = static_cast<ID3D12Resource*>(Texture->GetNativeResource());
 		InputFrame->SetTexture(D3D12Resource, [](ID3D12Resource*){ /* Texture release callback */ });
+		bTextureSet = true;
 	}
 	else if (RHIType == ERHIInterfaceType::Vulkan)
 	{
 		// Windows Vulkan texture handling
 		VkImage VulkanImage = static_cast<VkImage>(Texture->GetNativeResource());
 		InputFrame->SetTexture(VulkanImage, [](VkImage){ /* Texture release callback */ });
+		bTextureSet = true;
 	}
 #elif PLATFORM_LINUX
 	if (RHIType == ERHIInterfaceType::Vulkan)
 	{
-			if (bUseCUDAMode)
+		if (bUseCUDAMode)
+		{
+			FString InteropError;
+			if (!SetCUDATextureFromVulkan(Texture, InputFrame, InteropError))
 			{
-				FString InteropError;
-				if (!SetCUDATextureFromVulkan(Texture, InputFrame, InteropError))
-				{
-					UE_LOG(LogTemp, Error, TEXT("HardwareEncoderWrapper: CUDA/Vulkan interop failed: %s"), *InteropError);
-					EncodingFailureCount++;
-					ReleaseInputFrame();
-					return false;
-				}
+				UE_LOG(LogTemp, Error, TEXT("HardwareEncoderWrapper: CUDA/Vulkan interop failed: %s"), *InteropError);
+				EncodingFailureCount++;
+				ReleaseInputFrame();
+				return false;
 			}
-			else
+			bTextureSet = true;
+		}
+		else
 		{
 			// AMF mode: Direct Vulkan path
 			VkImage VulkanImage = static_cast<VkImage>(Texture->GetNativeResource());
 			InputFrame->SetTexture(VulkanImage, [](VkImage){ /* Texture release callback */ });
+			bTextureSet = true;
 		}
 	}
 #endif
-	else
+
+	if (!bTextureSet)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("HardwareEncoderWrapper: Unsupported RHI for SetTexture"));
+		UE_LOG(LogTemp, Warning, TEXT("HardwareEncoderWrapper: Unsupported RHI for SetTexture: %d"), (int32)RHIType);
 		EncodingFailureCount++;
 		ReleaseInputFrame();
 		return false;

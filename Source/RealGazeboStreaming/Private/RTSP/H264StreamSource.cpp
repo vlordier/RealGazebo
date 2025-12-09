@@ -1,15 +1,132 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #include "RTSP/H264StreamSource.h"
+#include "RTSP/Live555Types.h"
 #include "Misc/Base64.h"
 
-// Live555 includes (from ThirdParty/Live555)
-#include "liveMedia.hh"
-#include "BasicUsageEnvironment.hh"
+//----------------------------------------------------------
+// FLive555H264Source Implementation (Live555 Adapter)
+//----------------------------------------------------------
+
+/**
+ * FLive555H264Source
+ *
+ * Live555 FramedSource wrapper for FH264StreamSource.
+ * This is the actual Live555-compatible class that fetches NAL data.
+ *
+ * CRITICAL: This class is ONLY defined in .cpp to prevent Live555 types
+ * from leaking into public headers (which would cause BufferedPacket collision).
+ */
+class FLive555H264Source : public FramedSource
+{
+public:
+	static FLive555H264Source* CreateNew(UsageEnvironment& Env, FH264StreamSource* StreamSource);
+
+protected:
+	FLive555H264Source(UsageEnvironment& Env, FH264StreamSource* StreamSource);
+	virtual ~FLive555H264Source();
+
+	// Live555 interface
+	virtual void doGetNextFrame() override;
+
+private:
+	static void DeliverFrameStub(void* ClientData);
+	void DeliverFrame();
+
+	FH264StreamSource* H264Source;
+	FEncodedNALUnit CurrentNAL;
+};
+
+FLive555H264Source* FLive555H264Source::CreateNew(UsageEnvironment& Env, FH264StreamSource* StreamSource)
+{
+	return new FLive555H264Source(Env, StreamSource);
+}
+
+FLive555H264Source::FLive555H264Source(UsageEnvironment& Env, FH264StreamSource* StreamSource)
+	: FramedSource(Env)
+	, H264Source(StreamSource)
+{
+}
+
+FLive555H264Source::~FLive555H264Source()
+{
+}
+
+void FLive555H264Source::doGetNextFrame()
+{
+	// Schedule frame delivery on Live555's event loop
+	// This avoids blocking the RTSP thread
+	envir().taskScheduler().scheduleDelayedTask(0, DeliverFrameStub, this);
+}
+
+void FLive555H264Source::DeliverFrameStub(void* ClientData)
+{
+	((FLive555H264Source*)ClientData)->DeliverFrame();
+}
+
+void FLive555H264Source::DeliverFrame()
+{
+	// CRITICAL: Check if source is valid and not shutting down
+	if (!H264Source || H264Source->IsShuttingDown())
+	{
+		// Source is gone or shutting down - do nothing
+		// Don't reschedule, just return safely
+		return;
+	}
+
+	// Fetch next NAL from queue
+	if (!H264Source->FetchNextNAL(CurrentNAL))
+	{
+		// Check again before rescheduling (source may have shutdown during FetchNextNAL)
+		if (!H264Source || H264Source->IsShuttingDown())
+		{
+			return;
+		}
+		// No NAL available - reschedule
+		envir().taskScheduler().scheduleDelayedTask(1000, DeliverFrameStub, this); // 1ms delay
+		return;
+	}
+
+	// CRITICAL: H264VideoStreamDiscreteFramer expects NAL data WITHOUT start codes!
+	// The encoder outputs NALs WITH start codes (0x00000001 or 0x000001).
+	// We MUST strip the start code before passing to Live555, otherwise it causes:
+	// "H264or5VideoStreamDiscreteFramer error: MPEG 'start code' seen in the input"
+	const uint8* NALData = CurrentNAL.Data.GetData();
+	int32 NALSize = CurrentNAL.Data.Num();
+	int32 StartCodeOffset = 0;
+
+	// Detect and skip start code (4-byte 0x00000001 or 3-byte 0x000001)
+	if (NALSize >= 4 && NALData[0] == 0x00 && NALData[1] == 0x00 && NALData[2] == 0x00 && NALData[3] == 0x01)
+	{
+		StartCodeOffset = 4;
+	}
+	else if (NALSize >= 3 && NALData[0] == 0x00 && NALData[1] == 0x00 && NALData[2] == 0x01)
+	{
+		StartCodeOffset = 3;
+	}
+
+	// Adjust data pointer and size to skip start code
+	NALData += StartCodeOffset;
+	NALSize -= StartCodeOffset;
+
+	// Copy NAL data (without start code) to Live555's output buffer
+	const int32 CopySize = FMath::Min(NALSize, (int32)fMaxSize);
+	FMemory::Memcpy(fTo, NALData, CopySize);
+
+	fFrameSize = CopySize;
+	fNumTruncatedBytes = NALSize - CopySize;
+
+	// Set presentation time
+	fPresentationTime.tv_sec = CurrentNAL.TimestampMs / 1000;
+	fPresentationTime.tv_usec = (CurrentNAL.TimestampMs % 1000) * 1000;
+
+	// Notify Live555 that frame is ready
+	FramedSource::afterGetting(this);
+}
 
 //----------------------------------------------------------
 // FH264StreamSource Implementation
@@ -196,7 +313,7 @@ bool FH264StreamSource::FetchNextNAL(FEncodedNALUnit& OutNAL)
 // Live555 Integration
 //----------------------------------------------------------
 
-FramedSource* FH264StreamSource::CreateFramedSource()
+void* FH264StreamSource::CreateFramedSource()
 {
 	return FLive555H264Source::CreateNew(Env, this);
 }
@@ -256,93 +373,3 @@ FString FH264StreamSource::GetStatsString() const
 	);
 }
 
-//----------------------------------------------------------
-// FLive555H264Source Implementation (Live555 Adapter)
-//----------------------------------------------------------
-
-FLive555H264Source* FLive555H264Source::CreateNew(UsageEnvironment& Env, FH264StreamSource* StreamSource)
-{
-	return new FLive555H264Source(Env, StreamSource);
-}
-
-FLive555H264Source::FLive555H264Source(UsageEnvironment& Env, FH264StreamSource* StreamSource)
-	: FramedSource(Env)
-	, H264Source(StreamSource)
-{
-}
-
-FLive555H264Source::~FLive555H264Source()
-{
-}
-
-void FLive555H264Source::doGetNextFrame()
-{
-	// Schedule frame delivery on Live555's event loop
-	// This avoids blocking the RTSP thread
-	envir().taskScheduler().scheduleDelayedTask(0, DeliverFrameStub, this);
-}
-
-void FLive555H264Source::DeliverFrameStub(void* ClientData)
-{
-	((FLive555H264Source*)ClientData)->DeliverFrame();
-}
-
-void FLive555H264Source::DeliverFrame()
-{
-	// CRITICAL: Check if source is valid and not shutting down
-	if (!H264Source || H264Source->IsShuttingDown())
-	{
-		// Source is gone or shutting down - do nothing
-		// Don't reschedule, just return safely
-		return;
-	}
-
-	// Fetch next NAL from queue
-	if (!H264Source->FetchNextNAL(CurrentNAL))
-	{
-		// Check again before rescheduling (source may have shutdown during FetchNextNAL)
-		if (!H264Source || H264Source->IsShuttingDown())
-		{
-			return;
-		}
-		// No NAL available - reschedule
-		envir().taskScheduler().scheduleDelayedTask(1000, DeliverFrameStub, this); // 1ms delay
-		return;
-	}
-
-	// CRITICAL: H264VideoStreamDiscreteFramer expects NAL data WITHOUT start codes!
-	// The encoder outputs NALs WITH start codes (0x00000001 or 0x000001).
-	// We MUST strip the start code before passing to Live555, otherwise it causes:
-	// "H264or5VideoStreamDiscreteFramer error: MPEG 'start code' seen in the input"
-	const uint8* NALData = CurrentNAL.Data.GetData();
-	int32 NALSize = CurrentNAL.Data.Num();
-	int32 StartCodeOffset = 0;
-
-	// Detect and skip start code (4-byte 0x00000001 or 3-byte 0x000001)
-	if (NALSize >= 4 && NALData[0] == 0x00 && NALData[1] == 0x00 && NALData[2] == 0x00 && NALData[3] == 0x01)
-	{
-		StartCodeOffset = 4;
-	}
-	else if (NALSize >= 3 && NALData[0] == 0x00 && NALData[1] == 0x00 && NALData[2] == 0x01)
-	{
-		StartCodeOffset = 3;
-	}
-
-	// Adjust data pointer and size to skip start code
-	NALData += StartCodeOffset;
-	NALSize -= StartCodeOffset;
-
-	// Copy NAL data (without start code) to Live555's output buffer
-	const int32 CopySize = FMath::Min(NALSize, (int32)fMaxSize);
-	FMemory::Memcpy(fTo, NALData, CopySize);
-
-	fFrameSize = CopySize;
-	fNumTruncatedBytes = NALSize - CopySize;
-
-	// Set presentation time
-	fPresentationTime.tv_sec = CurrentNAL.TimestampMs / 1000;
-	fPresentationTime.tv_usec = (CurrentNAL.TimestampMs % 1000) * 1000;
-
-	// Notify Live555 that frame is ready
-	FramedSource::afterGetting(this);
-}

@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #include "Core/RealGazeboStreamingSubsystem.h"
@@ -10,6 +10,10 @@
 #include "RTSP/RTSPServer.h"
 #include "Engine/World.h"
 #include "Containers/Ticker.h"
+
+//----------------------------------------------------------
+// USubsystem Interface
+//----------------------------------------------------------
 
 void URealGazeboStreamingSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -59,7 +63,7 @@ bool URealGazeboStreamingSubsystem::StartRTSPServer(int32 Port)
 		return false;
 	}
 
-	// Bind to world tick for frame capture
+	// Start capturing frames: Register with engine ticker for per-frame updates
 	BindToWorldTick();
 
 	OnStreamingStarted.Broadcast();
@@ -128,8 +132,8 @@ bool URealGazeboStreamingSubsystem::CreateStreamWithConfig(UVehicleCameraCompone
 
 	UE_LOG(LogTemp, Log, TEXT("RealGazeboStreamingSubsystem: Creating stream %s..."), *StreamID.ToString());
 
-	// Create streaming pipeline
-	TUniquePtr<FStreamingPipeline> Pipeline = MakeUnique<FStreamingPipeline>(StreamID, Camera, RTSPServer);
+	// Create isolated streaming pipeline: Encoder + Frame Pool + NAL Queue + RTSP Source
+	TSharedPtr<FStreamingPipeline> Pipeline = MakeShared<FStreamingPipeline>(StreamID, Camera, RTSPServer);
 
 	FString ErrorMessage;
 	if (!Pipeline->Initialize(Config, ErrorMessage))
@@ -138,7 +142,7 @@ bool URealGazeboStreamingSubsystem::CreateStreamWithConfig(UVehicleCameraCompone
 		return false;
 	}
 
-	// Start streaming
+	// Start encoding and register with RTSP server
 	FString RTSPURL;
 	if (!Pipeline->Start(RTSPURL))
 	{
@@ -146,12 +150,12 @@ bool URealGazeboStreamingSubsystem::CreateStreamWithConfig(UVehicleCameraCompone
 		return false;
 	}
 
-	// Update camera component
+	// Update camera component with runtime status
 	Camera->bIsStreaming = true;
 	Camera->RTSPURL = RTSPURL;
 
-	// Store pipeline
-	ActiveStreams.Add(StreamID, MoveTemp(Pipeline));
+	// Register pipeline in active streams map
+	ActiveStreams.Add(StreamID, Pipeline);
 
 	// Broadcast event
 	OnStreamCreated.Broadcast(StreamID.VehicleID, StreamID.CameraID, RTSPURL);
@@ -162,7 +166,7 @@ bool URealGazeboStreamingSubsystem::CreateStreamWithConfig(UVehicleCameraCompone
 
 void URealGazeboStreamingSubsystem::DestroyStream(const FStreamIdentifier& StreamID)
 {
-	TUniquePtr<FStreamingPipeline>* Pipeline = ActiveStreams.Find(StreamID);
+	TSharedPtr<FStreamingPipeline>* Pipeline = ActiveStreams.Find(StreamID);
 	if (!Pipeline)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("RealGazeboStreamingSubsystem: Stream not found: %s"), *StreamID.ToString());
@@ -236,7 +240,7 @@ void URealGazeboStreamingSubsystem::UnregisterCamera(UVehicleCameraComponent* Ca
 
 FStreamInfo URealGazeboStreamingSubsystem::GetStreamInfo(const FStreamIdentifier& StreamID) const
 {
-	const TUniquePtr<FStreamingPipeline>* Pipeline = ActiveStreams.Find(StreamID);
+	const TSharedPtr<FStreamingPipeline>* Pipeline = ActiveStreams.Find(StreamID);
 	if (Pipeline)
 	{
 		return (*Pipeline)->GetStreamInfo();

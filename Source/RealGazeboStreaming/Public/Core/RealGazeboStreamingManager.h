@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -42,7 +42,7 @@
  * 4. Configure RTSP Port (default: 8554)
  * 5. Set AutoStartStreaming = true
  * 6. Add UVehicleCameraComponent to vehicle Blueprints with bEnableStreaming=true
- * 7. Play → All registered cameras auto-start with the same configuration
+ * 7. Play -> All registered cameras auto-start with the same configuration
  *
  * RTSP URLs generated as:
  * rtsp://localhost:PORT/vehicle_type_num/camera_id

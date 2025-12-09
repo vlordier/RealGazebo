@@ -1,17 +1,14 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #include "RTSP/RTSPServer.h"
 #include "RTSP/H264StreamSource.h"
 #include "RTSP/H264ServerMediaSubsession.h"
+#include "RTSP/Live555Types.h"  // Include Live555 types
 #include "HAL/PlatformProcess.h"
-
-// Live555 includes
-#include "liveMedia.hh"
-#include "BasicUsageEnvironment.hh"
 
 //----------------------------------------------------------
 // Construction & Initialization
@@ -201,8 +198,9 @@ bool FRTSPServerWrapper::AddStream(const FStreamIdentifier& StreamID, FH264Strea
 	}
 
 	// Create media session
-	ServerMediaSession* SMS = ServerMediaSession::createNew(*Env, TCHAR_TO_ANSI(*StreamName),
-		TCHAR_TO_ANSI(*StreamName), "RealGazebo H.264 Stream");
+	FTCHARToUTF8 StreamNameAnsi(*StreamName);
+	ServerMediaSession* SMS = ServerMediaSession::createNew(*Env, StreamNameAnsi.Get(),
+		StreamNameAnsi.Get(), "RealGazebo H.264 Stream");
 
 	if (!SMS)
 	{

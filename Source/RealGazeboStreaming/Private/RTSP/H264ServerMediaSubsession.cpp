@@ -1,17 +1,11 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #include "RTSP/H264ServerMediaSubsession.h"
 #include "RTSP/H264StreamSource.h"
-
-// Live555 includes
-#include "liveMedia.hh"
-#include "BasicUsageEnvironment.hh"
-#include "H264VideoStreamDiscreteFramer.hh"
-#include "H264VideoRTPSink.hh"
 
 //----------------------------------------------------------
 // Construction
@@ -66,7 +60,8 @@ FramedSource* FH264ServerMediaSubsession::createNewStreamSource(
 	}
 
 	// Create the FramedSource from our H264StreamSource
-	FramedSource* source = H264Source->CreateFramedSource();
+	// Cast from void* (opaque pointer to avoid Live555 type leaking into public headers)
+	FramedSource* source = static_cast<FramedSource*>(H264Source->CreateFramedSource());
 	if (!source)
 	{
 		UE_LOG(LogTemp, Error, TEXT("H264ServerMediaSubsession: Failed to create FramedSource"));

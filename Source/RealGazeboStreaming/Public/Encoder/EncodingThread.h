@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #pragma once
@@ -16,29 +16,30 @@
 /**
  * FEncodingThread
  *
- * Per-stream background encoding thread.
- * Runs encoding loop without blocking game thread.
+ * Per-stream background encoding thread that runs the encoding loop without blocking the game thread.
+ * Enables parallel encoding of multiple streams by running each encoder on its own worker thread.
  *
- * CRITICAL: Each stream has its own isolated thread!
- * Never share encoding threads between streams.
+ * CRITICAL ISOLATION REQUIREMENT:
+ * Each stream has its own dedicated encoding thread. Never share threads between streams
+ * as encoders maintain internal state that cannot be safely shared.
  *
  * Thread Responsibilities:
- * 1. Wait for captured frames (from FrameCapture)
- * 2. Submit frames to hardware encoder
- * 3. Retrieve encoded NAL units
- * 4. Forward NAL units to RTSP server
+ * 1. Dequeue captured frames from the frame queue
+ * 2. Submit frames to the hardware encoder (NVENC/AMF)
+ * 3. Retrieve encoded NAL units from the encoder
+ * 4. Forward NAL units to the RTSP streaming layer via callback
  *
  * Lifecycle:
- * - Start() - Creates thread and starts encoding loop
- * - QueueFrame() - Add captured frame to encode queue
- * - Run() - Main encoding loop (executes on background thread)
- * - Stop() - Signals thread to stop
- * - Shutdown() - Waits for thread to exit and cleans up
+ * - Start() - Create thread and begin encoding loop
+ * - QueueFrame() - Add captured frame to processing queue (game thread)
+ * - Run() - Main encoding loop running on background thread
+ * - Stop() - Signal thread to gracefully stop
+ * - Shutdown() - Wait for thread exit and clean up resources
  *
- * Thread Safety:
- * - Frame queue protected by mutex
- * - Encoder is NOT thread-safe internally (accessed only by this thread)
- * - NAL output queue is thread-safe (accessed by RTSP thread)
+ * Thread Safety Considerations:
+ * - Frame input queue: Thread-safe (TQueue + mutex for statistics)
+ * - Hardware encoder: NOT thread-safe, accessed exclusively by this thread
+ * - NAL output callback: Thread-safe, called from this thread
  */
 class FEncodingThread : public FRunnable
 {

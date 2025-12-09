@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Author    : Gonapinuwala Lahiru Sandaruwan
 // Supervisor: Prof. SungTae Moon - Project lead & research supervision
-// Licensed under the BSD-3-Clause License.
+// Licensed under the GNU General Public License v3.0.
 // See LICENSE file in the project root for full license information.
 
 #include "Camera/VehicleCameraComponent.h"
@@ -10,20 +10,24 @@
 
 UVehicleCameraComponent::UVehicleCameraComponent()
 {
-	// Enable ticking for polling vehicle activation
+	// Enable ticking to poll for vehicle activation (VehicleID detection)
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = true;
 
+	// Manual capture mode: StreamingPipeline controls frame timing to match target FPS
 	bCaptureEveryFrame = false;
 	bCaptureOnMovement = false;
+
+	// Persist rendering state to enable Virtual Shadow Map caching (UE5 optimization)
+	//bAlwaysPersistRenderingState = true;
 }
 
 void UVehicleCameraComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Deferred initialization via polling in TickComponent.
-	// Vehicle pooling sets VehicleID AFTER BeginPlay.
+	// Deferred initialization: VehicleID will be detected via polling in TickComponent.
+	// Vehicle pooling system assigns VehicleID AFTER BeginPlay completes.
 	UE_LOG(LogTemp, Log, TEXT("VehicleCameraComponent: BeginPlay - polling for vehicle activation..."));
 }
 
@@ -43,12 +47,12 @@ void UVehicleCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// POLLING: Check if vehicle is active and initialize streaming
+	// POLLING LOOP: Wait for vehicle activation and auto-start streaming
 	if (!bIsInitialized)
 	{
 		TryPopulateVehicleID();
 
-		// Check if VehicleID is valid (not 0_0)
+		// Validate VehicleID: Must not be default (0_0) to be active
 		const bool bValidVehicleID = (VehicleID.VehicleType != 0 || VehicleID.VehicleNum != 0);
 
 		if (bValidVehicleID && bEnableStreaming)
@@ -66,7 +70,7 @@ void UVehicleCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
 			bIsInitialized = true;
 
-			// Disable ticking after initialization
+			// Stop ticking: Initialization complete, no longer need to poll
 			PrimaryComponentTick.SetTickFunctionEnable(false);
 		}
 	}
@@ -141,7 +145,7 @@ void UVehicleCameraComponent::TryPopulateVehicleID()
 	AVehicleBasePawn* VehiclePawn = Cast<AVehicleBasePawn>(Owner);
 	if (VehiclePawn)
 	{
-		// Only use if VehicleID is valid (not 0_0)
+		// Copy VehicleID only if it's valid (not the default 0_0)
 		if (VehiclePawn->VehicleID.VehicleNum != 0 || VehiclePawn->VehicleID.VehicleType != 0)
 		{
 			VehicleID = VehiclePawn->VehicleID;
