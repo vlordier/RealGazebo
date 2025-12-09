@@ -146,7 +146,9 @@ This project is licensed under the **GNU General Public License v3.0**.
 See [LICENSE](LICENSE) file for full license information.
 
 **Copyright (c) 2024-2025 SUV Lab, Chungbuk National University**
+
 **Authors:** Gonapinuwala Lahiru Sandaruwan, MinKyu Kim
+
 **Supervisor:** Prof. SungTae Moon
 
 ---
@@ -161,7 +163,9 @@ See [LICENSE](LICENSE) file for full license information.
 - Deep learning-enhanced autonomous navigation
 
 **Director:** Prof. SungTae Moon
+
 **Location:** Chungbuk National University, Department of Intelligent System & Robotics
+
 **Contact:** stmoon@cbnu.ac.kr | +82-43-261-3256
 
 ---
