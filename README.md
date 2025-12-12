@@ -41,6 +41,19 @@ Hardware-accelerated H.264 video streaming via RTSP. Uses NVENC/AMF encoders for
 
 **Key Role:** Real-time video streaming (port 8554) for multi-camera vehicle feeds
 
+### Project Structure
+
+```
+Plugins/RealGazebo/
+├── Source/
+│   ├── RealGazebo/              # Master orchestrator module
+│   ├── RealGazeboBridge/        # Network & vehicle management
+│   ├── RealGazeboUI/            # Visualization & camera control
+│   └── RealGazeboStreaming/     # RTSP streaming module
+├── Content/                     # Plugin content assets
+└── README.md                    # This file
+```
+
 ---
 
 ## Key Features
@@ -71,7 +84,7 @@ Hardware-accelerated H.264 video streaming via RTSP. Uses NVENC/AMF encoders for
 ## Module Dependencies
 
 ```
-RealGazebo (Master)
+RealGazebo (Master - UWorldSubsystem)
 ├── RealGazeboBridge (UGameInstanceSubsystem)
 │   ├── UDP Receiver (port 5005)
 │   ├── Vehicle Pool Manager
@@ -124,22 +137,6 @@ Header (3 bytes):
 
 ---
 
-## Development
-
-### Project Structure
-```
-Plugins/RealGazebo/
-├── Source/
-│   ├── RealGazebo/              # Master orchestrator module
-│   ├── RealGazeboBridge/        # Network & vehicle management
-│   ├── RealGazeboUI/            # Visualization & camera control
-│   └── RealGazeboStreaming/     # RTSP streaming module
-├── Content/                     # Plugin content assets
-└── README.md                    # This file
-```
-
----
-
 ## License
 
 This project is licensed under the **GNU General Public License v3.0**.
@@ -174,7 +171,6 @@ See [LICENSE](LICENSE) file for full license information.
 
 - **Homepage:** [realgazebo.chungbuk.ac.kr](https://realgazebo.chungbuk.ac.kr/)
 - **SUV Lab:** [sites.google.com/view/suvlab](https://sites.google.com/view/suvlab/home)
-- **GitHub:** [github.com/SUV-Lab/RealGazebo](https://github.com/SUV-Lab/RealGazebo)
 - **PX4 Integration:** [github.com/SUV-Lab/RealGazebo-PX4](https://github.com/SUV-Lab/RealGazebo-PX4)
 - **ROS2 Integration:** [github.com/SUV-Lab/RealGazebo-ROS2](https://github.com/SUV-Lab/RealGazebo-ROS2)
 - **Installation Guide:** [Documentation](https://realgazebo.chungbuk.ac.kr/install)
