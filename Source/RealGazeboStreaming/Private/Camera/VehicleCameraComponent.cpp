@@ -52,10 +52,11 @@ void UVehicleCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	{
 		TryPopulateVehicleID();
 
-		// Validate VehicleID: Must not be default (0_0) to be active
-		const bool bValidVehicleID = (VehicleID.VehicleType != 0 || VehicleID.VehicleNum != 0);
+		// Check if owning vehicle is active (not in pool)
+		AVehicleBasePawn* VehiclePawn = Cast<AVehicleBasePawn>(GetOwner());
+		const bool bVehicleReady = VehiclePawn && VehiclePawn->IsActiveVehicle();
 
-		if (bValidVehicleID && bEnableStreaming)
+		if (bVehicleReady && bEnableStreaming)
 		{
 			UE_LOG(LogTemp, Log, TEXT("VehicleCameraComponent: Vehicle activated (VehicleID: %s) - initializing stream"),
 				*VehicleID.ToString());
@@ -143,14 +144,12 @@ void UVehicleCameraComponent::TryPopulateVehicleID()
 	}
 
 	AVehicleBasePawn* VehiclePawn = Cast<AVehicleBasePawn>(Owner);
-	if (VehiclePawn)
+	if (VehiclePawn && VehiclePawn->IsActiveVehicle())
 	{
-		// Copy VehicleID only if it's valid (not the default 0_0)
-		if (VehiclePawn->VehicleID.VehicleNum != 0 || VehiclePawn->VehicleID.VehicleType != 0)
-		{
-			VehicleID = VehiclePawn->VehicleID;
-			VehicleTypeName = VehiclePawn->VehicleTypeName;
-		}
+		// Copy VehicleID when vehicle is active (not in pool)
+		// Note: 0_0 is a valid VehicleID (Type 0, Num 0)
+		VehicleID = VehiclePawn->VehicleID;
+		VehicleTypeName = VehiclePawn->VehicleTypeName;
 	}
 }
 

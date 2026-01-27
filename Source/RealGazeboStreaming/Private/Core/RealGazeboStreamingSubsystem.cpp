@@ -161,6 +161,7 @@ bool URealGazeboStreamingSubsystem::CreateStreamWithConfig(UVehicleCameraCompone
 	OnStreamCreated.Broadcast(StreamID.VehicleID, StreamID.CameraID, RTSPURL);
 
 	UE_LOG(LogTemp, Log, TEXT("RealGazeboStreamingSubsystem: Stream created - %s"), *RTSPURL);
+	UE_LOG(LogTemp, Log, TEXT("RTSP Stream Available: %s"), *RTSPURL);
 	return true;
 }
 
