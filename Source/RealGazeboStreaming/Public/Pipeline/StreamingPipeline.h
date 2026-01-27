@@ -245,6 +245,12 @@ private:
 	/** Is pipeline streaming? */
 	std::atomic<bool> bStreaming{false};
 
+	/** Is pipeline shutting down? Used to prevent callbacks during cleanup */
+	std::atomic<bool> bShuttingDown{false};
+
+	/** Mutex to protect H264Source access during callbacks */
+	mutable FCriticalSection H264SourceMutex;
+
 	/** Frame counter */
 	std::atomic<uint64> FrameCounter{0};
 

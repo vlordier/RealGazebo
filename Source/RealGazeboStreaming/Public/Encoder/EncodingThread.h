@@ -101,7 +101,15 @@ public:
 	/** Register callback for when NAL units are encoded */
 	void SetNALEncodedCallback(FOnNALUnitsEncoded InCallback)
 	{
+		FScopeLock Lock(&CallbackMutex);
 		OnNALUnitsEncoded = InCallback;
+	}
+
+	/** Clear callback - MUST be called before destroying the callback target */
+	void ClearNALEncodedCallback()
+	{
+		FScopeLock Lock(&CallbackMutex);
+		OnNALUnitsEncoded.Unbind();
 	}
 
 	//----------------------------------------------------------
@@ -187,6 +195,9 @@ private:
 
 	/** Callback when NAL units are encoded */
 	FOnNALUnitsEncoded OnNALUnitsEncoded;
+
+	/** Mutex for callback access */
+	mutable FCriticalSection CallbackMutex;
 
 	//----------------------------------------------------------
 	// Statistics

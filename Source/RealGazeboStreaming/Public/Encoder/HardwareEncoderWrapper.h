@@ -173,6 +173,9 @@ public:
 	/** Shutdown encoder and release resources */
 	void Shutdown();
 
+	/** Signal encoder to stop accepting new frames (call before thread shutdown) */
+	void PrepareForShutdown() { bShuttingDown.store(true); }
+
 	//----------------------------------------------------------
 	// Encoding Operations
 	//----------------------------------------------------------

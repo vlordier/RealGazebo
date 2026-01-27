@@ -752,6 +752,14 @@ bool FHardwareEncoderWrapper::EncodeFrame(FRHITexture* Texture, uint64 FrameNumb
 	AVEncoder::FVideoEncoder::FEncodeOptions EncodeOptions;
 	EncodeOptions.bForceKeyFrame = bForceKeyframe || bForceNextKeyframe.exchange(false);
 
+	// CRITICAL: Final shutdown check right before Encode()
+	// Shutdown may have started between the initial check and here
+	if (bShuttingDown.load() || !VideoEncoder.IsValid())
+	{
+		ReleaseInputFrame();
+		return false;
+	}
+
 	// Submit frame to encoder
 	VideoEncoder->Encode(InputFrame, EncodeOptions);
 
@@ -772,6 +780,18 @@ bool FHardwareEncoderWrapper::GetEncodedData(TArray<FEncodedNALUnit>& OutNALUnit
 	FEncodedNALUnit NALUnit;
 	while (NALOutputQueue.Dequeue(NALUnit))
 	{
+		// CRITICAL: Validate NAL data integrity after dequeue
+		// Detects memory corruption from encoder callback issues
+		const uint8* DataPtr = NALUnit.Data.GetData();
+		const int32 DataSize = NALUnit.Data.Num();
+
+		if (DataSize > 0 && (DataPtr == nullptr || reinterpret_cast<uintptr_t>(DataPtr) == ~static_cast<uintptr_t>(0)))
+		{
+			UE_LOG(LogTemp, Error, TEXT("HardwareEncoderWrapper: Corrupted NAL from queue (Ptr=0x%p, Size=%d) - encoder callback may have produced invalid data"),
+				DataPtr, DataSize);
+			continue; // Skip corrupted NAL
+		}
+
 		OutNALUnits.Add(MoveTemp(NALUnit));
 	}
 
@@ -790,13 +810,34 @@ void FHardwareEncoderWrapper::ForceKeyframe()
 
 void FHardwareEncoderWrapper::OnEncodedFrame(uint32 LayerIndex, const TSharedPtr<AVEncoder::FVideoEncoderInputFrame> Frame, const AVEncoder::FCodecPacket& Packet)
 {
-	if (!Frame.IsValid() || bShuttingDown)
+	// CRITICAL: Check shutdown flag first - encoder may call this callback during shutdown
+	if (bShuttingDown.load())
+	{
+		return;
+	}
+
+	if (!Frame.IsValid())
 	{
 		return;
 	}
 
 	// Check if we have data
 	if (Packet.DataSize == 0 || !Packet.Data.IsValid())
+	{
+		return;
+	}
+
+	// CRITICAL: Validate actual data pointer before use
+	// During shutdown, the pointer may be invalid (0xFFFFFFFFFFFFFFFF)
+	const uint8* PacketDataPtr = Packet.Data.Get();
+	if (PacketDataPtr == nullptr || reinterpret_cast<uintptr_t>(PacketDataPtr) == ~static_cast<uintptr_t>(0))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HardwareEncoderWrapper: Invalid packet data pointer (0x%p) - skipping"), PacketDataPtr);
+		return;
+	}
+
+	// Double-check shutdown flag after validation (may have changed)
+	if (bShuttingDown.load())
 	{
 		return;
 	}
@@ -810,12 +851,30 @@ void FHardwareEncoderWrapper::OnEncodedFrame(uint32 LayerIndex, const TSharedPtr
 
 	// Parse bitstream into NAL units
 	TArray<FEncodedNALUnit> NALUnits;
-	ParseNALUnits(Packet.Data.Get(), Packet.DataSize, NALUnits);
+	ParseNALUnits(PacketDataPtr, Packet.DataSize, NALUnits);
+
+	// Check shutdown again after parsing (may have started during parse)
+	if (bShuttingDown.load())
+	{
+		return;
+	}
 
 	// Enqueue NAL units for retrieval
 	FScopeLock Lock(&NALQueueMutex);
 	for (FEncodedNALUnit& NALUnit : NALUnits)
 	{
+		// CRITICAL: Validate NAL data before enqueue
+		// If corrupted here, the problem is in ParseNALUnits or encoder output
+		const uint8* DataPtr = NALUnit.Data.GetData();
+		const int32 DataSize = NALUnit.Data.Num();
+
+		if (DataSize > 0 && (DataPtr == nullptr || reinterpret_cast<uintptr_t>(DataPtr) == ~static_cast<uintptr_t>(0)))
+		{
+			UE_LOG(LogTemp, Error, TEXT("HardwareEncoderWrapper: ParseNALUnits produced corrupted NAL (Ptr=0x%p, Size=%d) - encoder output may be invalid"),
+				DataPtr, DataSize);
+			continue;
+		}
+
 		NALUnit.TimestampMs = Frame->GetTimestampUs() / 1000;
 		NALUnit.FrameNumber = CurrentFrameNumber;
 		NALUnit.bIsKeyframe = Packet.IsKeyFrame;

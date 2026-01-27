@@ -74,6 +74,24 @@ void FStreamingPipeline::Shutdown()
 
 	UE_LOG(LogTemp, Log, TEXT("StreamingPipeline: Shutting down stream %s..."), *StreamID.ToString());
 
+	// CRITICAL: Set shutdown flag FIRST to prevent callbacks from accessing H264Source
+	// This fixes the crash when VLC player stops - EncodingThread may still be calling OnNALUnitsEncoded
+	bShuttingDown.store(true);
+
+	// CRITICAL: Signal encoder to stop BEFORE stopping thread
+	// This ensures EncodeFrame() returns immediately when EncodingThread calls it
+	if (HardwareEncoder)
+	{
+		HardwareEncoder->PrepareForShutdown();
+	}
+
+	// CRITICAL: Clear callback BEFORE stopping thread to prevent dangling pointer access
+	// The callback points to this StreamingPipeline instance - must unbind before destruction
+	if (EncodingThread)
+	{
+		EncodingThread->ClearNALEncodedCallback();
+	}
+
 	Stop();
 	CleanupComponents();
 
@@ -248,9 +266,20 @@ bool FStreamingPipeline::InitializeComponents(FString& OutErrorMessage)
 
 void FStreamingPipeline::CleanupComponents()
 {
-	// Cleanup in reverse order
-	H264Source.Reset();
-	EncodingThread.Reset();
+	// CRITICAL: Stop encoding thread FIRST and wait for completion
+	// to prevent race condition with H264Source access
+	if (EncodingThread)
+	{
+		EncodingThread->Shutdown();  // Waits for thread completion
+		EncodingThread.Reset();
+	}
+
+	// Lock mutex before destroying H264Source to ensure no callback is accessing it
+	{
+		FScopeLock Lock(&H264SourceMutex);
+		H264Source.Reset();
+	}
+
 	HardwareEncoder.Reset();
 	FrameCapture.Reset();
 	FramePool.Reset();
@@ -409,7 +438,33 @@ bool FStreamingPipeline::CaptureFrame()
 
 void FStreamingPipeline::OnNALUnitsEncoded(const TArray<FEncodedNALUnit>& NALUnits)
 {
-	if (!H264Source)
+	// CRITICAL: Check shutdown flag FIRST - prevents crash when VLC stops playback
+	// The EncodingThread may still be running when Shutdown() is called
+	if (bShuttingDown.load())
+	{
+		return;
+	}
+
+	// CRITICAL: Validate NAL units before forwarding to prevent crash from corrupted data
+	// This catches memory corruption issues from encoder callbacks
+	for (int32 i = 0; i < NALUnits.Num(); ++i)
+	{
+		const FEncodedNALUnit& NAL = NALUnits[i];
+		const uint8* DataPtr = NAL.Data.GetData();
+		const int32 DataSize = NAL.Data.Num();
+
+		if (DataSize > 0 && (DataPtr == nullptr || reinterpret_cast<uintptr_t>(DataPtr) == ~static_cast<uintptr_t>(0)))
+		{
+			UE_LOG(LogTemp, Error, TEXT("StreamingPipeline: Corrupted NAL[%d] from encoder (Ptr=0x%p, Size=%d) for stream %s - skipping all NALs"),
+				i, DataPtr, DataSize, *StreamID.ToString());
+			return;
+		}
+	}
+
+	// Lock mutex and check H264Source under lock to prevent race with CleanupComponents
+	FScopeLock Lock(&H264SourceMutex);
+
+	if (!H264Source || bShuttingDown.load())
 	{
 		return;
 	}

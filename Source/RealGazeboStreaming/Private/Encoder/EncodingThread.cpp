@@ -175,6 +175,12 @@ void FEncodingThread::Exit()
 
 bool FEncodingThread::ProcessNextFrame()
 {
+	// CRITICAL: Check stop flag at the start - prevents accessing destroyed resources
+	if (bStopRequested.load())
+	{
+		return false;
+	}
+
 	// Dequeue frame and decrement size atomically
 	FCaptureFrame CapturedFrame;
 	if (!FrameQueue.Dequeue(CapturedFrame))
@@ -182,6 +188,17 @@ bool FEncodingThread::ProcessNextFrame()
 		return false; // Queue empty
 	}
 	QueueSize--;
+
+	// CRITICAL: Check stop flag again after dequeue - encoder may be shutting down
+	if (bStopRequested.load())
+	{
+		// Release frame back to pool before returning
+		if (FramePool && CapturedFrame.PooledFrame)
+		{
+			FramePool->ReleaseFrame(CapturedFrame.PooledFrame);
+		}
+		return false;
+	}
 
 	// Verify frame is valid
 	if (!CapturedFrame.PooledFrame || !CapturedFrame.PooledFrame->IsValid())
@@ -203,6 +220,16 @@ bool FEncodingThread::ProcessNextFrame()
 		CapturedFrame.WaitForGPU();
 	}
 
+	// CRITICAL: Check stop flag before encoding - encoder may be destroyed
+	if (bStopRequested.load() || !Encoder || !Encoder->IsReady())
+	{
+		if (FramePool && CapturedFrame.PooledFrame)
+		{
+			FramePool->ReleaseFrame(CapturedFrame.PooledFrame);
+		}
+		return false;
+	}
+
 	// Submit frame to encoder
 	const bool bSuccess = Encoder->EncodeFrame(
 		CapturedFrame.PooledFrame->Texture,
@@ -222,14 +249,29 @@ bool FEncodingThread::ProcessNextFrame()
 		return false;
 	}
 
+	// CRITICAL: Check stop flag before GetEncodedData - encoder may be shutting down
+	if (bStopRequested.load())
+	{
+		if (FramePool && CapturedFrame.PooledFrame)
+		{
+			FramePool->ReleaseFrame(CapturedFrame.PooledFrame);
+		}
+		return false;
+	}
+
 	// Retrieve encoded NAL units
 	TArray<FEncodedNALUnit> NALUnits;
-	if (Encoder->GetEncodedData(NALUnits) && NALUnits.Num() > 0)
+	if (Encoder && Encoder->GetEncodedData(NALUnits) && NALUnits.Num() > 0)
 	{
-		// Broadcast NAL units to RTSP server
-		if (OnNALUnitsEncoded.IsBound())
+		// CRITICAL: Check stop flag and use mutex to safely call callback
+		// Prevents crash when VLC stops - callback target may be destroyed
+		if (!bStopRequested.load())
 		{
-			OnNALUnitsEncoded.Execute(NALUnits);
+			FScopeLock Lock(&CallbackMutex);
+			if (OnNALUnitsEncoded.IsBound() && !bStopRequested.load())
+			{
+				OnNALUnitsEncoded.Execute(NALUnits);
+			}
 		}
 	}
 

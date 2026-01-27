@@ -39,6 +39,8 @@ private:
 
 	FH264StreamSource* H264Source;
 	FEncodedNALUnit CurrentNAL;
+	TaskToken PendingTask = nullptr;  // Track scheduled task for cleanup
+	bool bIsClosing = false;          // Prevent callbacks during destruction
 };
 
 FLive555H264Source* FLive555H264Source::CreateNew(UsageEnvironment& Env, FH264StreamSource* StreamSource)
@@ -54,13 +56,32 @@ FLive555H264Source::FLive555H264Source(UsageEnvironment& Env, FH264StreamSource*
 
 FLive555H264Source::~FLive555H264Source()
 {
+	// CRITICAL: Prevent any more callbacks from running
+	bIsClosing = true;
+
+	// Cancel pending scheduled task to prevent dangling pointer callback
+	// When VLC stops, Live555 destroys this source, but scheduled DeliverFrameStub
+	// may still be pending - calling it after destruction causes memory corruption
+	if (PendingTask != nullptr)
+	{
+		envir().taskScheduler().unscheduleDelayedTask(PendingTask);
+		PendingTask = nullptr;
+	}
+
+	// Clear source pointer
+	H264Source = nullptr;
 }
 
 void FLive555H264Source::doGetNextFrame()
 {
+	if (bIsClosing)
+	{
+		return;
+	}
+
 	// Schedule frame delivery on Live555's event loop
 	// This avoids blocking the RTSP thread
-	envir().taskScheduler().scheduleDelayedTask(0, DeliverFrameStub, this);
+	PendingTask = envir().taskScheduler().scheduleDelayedTask(0, DeliverFrameStub, this);
 }
 
 void FLive555H264Source::DeliverFrameStub(void* ClientData)
@@ -70,6 +91,12 @@ void FLive555H264Source::DeliverFrameStub(void* ClientData)
 
 void FLive555H264Source::DeliverFrame()
 {
+	// CRITICAL: Check if we're closing - prevents crash from dangling pointer
+	if (bIsClosing)
+	{
+		return;
+	}
+
 	// CRITICAL: Check if source is valid and not shutting down
 	if (!H264Source || H264Source->IsShuttingDown())
 	{
@@ -82,12 +109,12 @@ void FLive555H264Source::DeliverFrame()
 	if (!H264Source->FetchNextNAL(CurrentNAL))
 	{
 		// Check again before rescheduling (source may have shutdown during FetchNextNAL)
-		if (!H264Source || H264Source->IsShuttingDown())
+		if (bIsClosing || !H264Source || H264Source->IsShuttingDown())
 		{
 			return;
 		}
 		// No NAL available - reschedule
-		envir().taskScheduler().scheduleDelayedTask(1000, DeliverFrameStub, this); // 1ms delay
+		PendingTask = envir().taskScheduler().scheduleDelayedTask(1000, DeliverFrameStub, this); // 1ms delay
 		return;
 	}
 
@@ -175,6 +202,17 @@ void FH264StreamSource::PushNALUnit(const FEncodedNALUnit& NALUnit)
 {
 	if (!NALUnit.IsValid())
 	{
+		return;
+	}
+
+	// CRITICAL: Validate Data pointer to catch memory corruption
+	// Crash was occurring with Data pointer = 0xFFFFFFFFFFFFFFFF (invalid)
+	const uint8* DataPtr = NALUnit.Data.GetData();
+	const int32 DataSize = NALUnit.Data.Num();
+	if (DataSize > 0 && (DataPtr == nullptr || reinterpret_cast<uintptr_t>(DataPtr) == ~static_cast<uintptr_t>(0)))
+	{
+		UE_LOG(LogTemp, Error, TEXT("H264StreamSource: NALUnit has corrupted Data pointer (0x%p, Size=%d) for stream %s - memory corruption detected!"),
+			DataPtr, DataSize, *StreamID.ToString());
 		return;
 	}
 
