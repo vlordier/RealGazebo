@@ -7,6 +7,7 @@
 #include "RTSP/H264StreamSource.h"
 #include "RTSP/Live555Types.h"
 #include "Misc/Base64.h"
+#include "HAL/PlatformTime.h"
 
 //----------------------------------------------------------
 // FLive555H264Source Implementation (Live555 Adapter)
@@ -329,6 +330,10 @@ bool FH264StreamSource::FetchNextNAL(FEncodedNALUnit& OutNAL)
 		return false;
 	}
 
+	// Update last fetch time for client activity detection
+	// Even if queue is empty, a client is actively requesting frames
+	LastFetchTime.store(FPlatformTime::Seconds());
+
 	FScopeLock Lock(&PrivateMutex);
 
 	// Double-check after acquiring lock
@@ -345,6 +350,21 @@ bool FH264StreamSource::FetchNextNAL(FEncodedNALUnit& OutNAL)
 	}
 
 	return false;
+}
+
+bool FH264StreamSource::HasActiveClient(double TimeoutSeconds) const
+{
+	const double CurrentTime = FPlatformTime::Seconds();
+	const double LastFetch = LastFetchTime.load();
+
+	// If never fetched, no active client
+	if (LastFetch <= 0.0)
+	{
+		return false;
+	}
+
+	// Client is active if last fetch was within timeout period
+	return (CurrentTime - LastFetch) < TimeoutSeconds;
 }
 
 //----------------------------------------------------------

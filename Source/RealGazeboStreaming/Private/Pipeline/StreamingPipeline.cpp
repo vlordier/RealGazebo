@@ -279,7 +279,6 @@ void FStreamingPipeline::CleanupComponents()
 		FScopeLock Lock(&H264SourceMutex);
 		H264Source.Reset();
 	}
-
 	HardwareEncoder.Reset();
 	FrameCapture.Reset();
 	FramePool.Reset();
@@ -365,6 +364,14 @@ bool FStreamingPipeline::CaptureFrame()
 {
 	if (!bStreaming || !FrameCapture || !EncodingThread)
 	{
+		return false;
+	}
+
+	// CLIENT ACTIVITY CHECK: Skip capture if no RTSP client is consuming frames
+	// This saves GPU resources when no one is watching the stream
+	if (H264Source && !H264Source->HasActiveClient(2.0))
+	{
+		// No client connected or client inactive for 2 seconds - skip rendering
 		return false;
 	}
 
@@ -466,7 +473,19 @@ void FStreamingPipeline::OnNALUnitsEncoded(const TArray<FEncodedNALUnit>& NALUni
 
 	if (!H264Source || bShuttingDown.load())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("StreamingPipeline: OnNALUnitsEncoded - H264Source is null!"));
 		return;
+	}
+
+	// Validate NAL units before pushing
+	for (int32 i = 0; i < NALUnits.Num(); i++)
+	{
+		const FEncodedNALUnit& NAL = NALUnits[i];
+		if (NAL.Data.GetData() == nullptr && NAL.Data.Num() > 0)
+		{
+			UE_LOG(LogTemp, Error, TEXT("StreamingPipeline: NAL[%d] has corrupted data (null ptr with size %d)!"), i, NAL.Data.Num());
+			return;
+		}
 	}
 
 	// Forward encoded NAL units to H.264 stream source
@@ -531,11 +550,12 @@ FStreamInfo FStreamingPipeline::GetStreamInfo() const
 	Info.State = bStreaming ? EStreamState::Active : (bInitialized ? EStreamState::Idle : EStreamState::Error);
 	Info.Config = Config;
 	Info.EncoderType = GetEncoderType();
+	// ConnectedClients: Use HasActiveClient() to detect if any client is consuming frames
+	// Returns 1 if active client detected, 0 otherwise (not exact count, but good enough for status)
+	Info.ConnectedClients = (H264Source && H264Source->HasActiveClient()) ? 1 : 0;
 	// Statistics not yet implemented:
-	// - ConnectedClients: Requires tracking RTSP session count in RTSPServer (Live555 ClientSession tracking)
 	// - ActualFPS: Requires calculating delta between FrameCounter over time window (rolling average)
 	// - AvgEncodingTimeMs: Requires timing encoder EncodeFrame() call and averaging over window
-	Info.ConnectedClients = 0;
 	Info.TotalFramesEncoded = TotalFramesCaptured;
 	Info.ActualFPS = 0.0f;
 	Info.AvgEncodingTimeMs = 0.0f;

@@ -156,6 +156,16 @@ public:
 	bool IsShuttingDown() const { return bShuttingDown.load(); }
 
 	/**
+	 * Check if there's an active client consuming frames.
+	 * Uses last FetchNextNAL() call time to determine client activity.
+	 * If no fetch in TimeoutSeconds, assumes no active client.
+	 *
+	 * @param TimeoutSeconds - Inactivity timeout (default 2.0 seconds)
+	 * @return True if a client has fetched frames recently
+	 */
+	bool HasActiveClient(double TimeoutSeconds = 2.0) const;
+
+	/**
 	 * Fetch next NAL unit from queue.
 	 * Called by FLive555H264Source::doGetNextFrame().
 	 * Public so Live555 wrapper can access it.
@@ -224,6 +234,9 @@ private:
 
 	/** Shutdown flag - set when source is being destroyed */
 	std::atomic<bool> bShuttingDown{false};
+
+	/** Last time FetchNextNAL() was called (for client activity detection) */
+	std::atomic<double> LastFetchTime{0.0};
 
 	//----------------------------------------------------------
 	// Statistics
