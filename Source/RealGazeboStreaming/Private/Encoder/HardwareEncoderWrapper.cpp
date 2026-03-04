@@ -85,21 +85,50 @@ void FHardwareEncoderWrapper::Shutdown()
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("HardwareEncoderWrapper: Shutting down..."));
+	const uint64 FramesEncoded = TotalFramesEncoded.load();
+	UE_LOG(LogTemp, Log, TEXT("HardwareEncoderWrapper: Shutting down... (Encoded %llu frames)"), FramesEncoded);
 	bShuttingDown = true;
 
-	// Shutdown encoder
-	if (VideoEncoder)
-	{
-		VideoEncoder->Shutdown();
-		VideoEncoder.Reset();
-	}
-
-	// Shutdown input
+	// Flush input first to complete pending operations
 	if (VideoEncoderInput)
 	{
 		VideoEncoderInput->Flush();
-		VideoEncoderInput.Reset();
+	}
+
+	// WORKAROUND: UE5 NVENC bug - Shutdown() crashes if no frames were encoded
+	// because internal buffers were never allocated
+	if (FramesEncoded > 0)
+	{
+		// Frames were encoded - safe to shutdown normally
+		FPlatformProcess::Sleep(0.05f);
+
+		if (VideoEncoder)
+		{
+			VideoEncoder->Shutdown();
+			VideoEncoder.Reset();
+		}
+		if (VideoEncoderInput)
+		{
+			VideoEncoderInput.Reset();
+		}
+	}
+	else
+	{
+		// No frames encoded - NVENC internal buffers not allocated
+		// Must prevent destructor from running (it calls Shutdown which crashes)
+		// Store in static array to keep alive (intentional leak for stability)
+		UE_LOG(LogTemp, Warning, TEXT("HardwareEncoderWrapper: No frames encoded - leaking NVENC to prevent crash"));
+		static TArray<TUniquePtr<AVEncoder::FVideoEncoder>> LeakedEncoders;
+		static TArray<TSharedPtr<AVEncoder::FVideoEncoderInput>> LeakedInputs;
+		if (VideoEncoder)
+		{
+			LeakedEncoders.Add(MoveTemp(VideoEncoder));
+		}
+		if (VideoEncoderInput)
+		{
+			LeakedInputs.Add(VideoEncoderInput);
+			VideoEncoderInput.Reset();
+		}
 	}
 
 	// Clear CUDA texture cache (releases cached CUarrays)
@@ -109,7 +138,7 @@ void FHardwareEncoderWrapper::Shutdown()
 	bShuttingDown = false;
 
 	UE_LOG(LogTemp, Log, TEXT("HardwareEncoderWrapper: Shutdown complete (Encoded: %llu frames, %llu keyframes, %.2f MB)"),
-		TotalFramesEncoded.load(),
+		FramesEncoded,
 		TotalKeyframesEncoded.load(),
 		TotalBytesOutput.load() / (1024.0 * 1024.0));
 }

@@ -132,25 +132,8 @@ bool FStreamingPipeline::InitializeComponents(FString& OutErrorMessage)
 		return false;
 	}
 
-	// Create hardware encoder (per-stream instance)
-	UE_LOG(LogTemp, Log, TEXT("StreamingPipeline: Creating hardware encoder..."));
-	HardwareEncoder = MakeShared<FHardwareEncoderWrapper>();
-	if (!HardwareEncoder->Initialize(EncoderConfig, OutErrorMessage))
-	{
-		return false;
-	}
-
-	// Create encoding thread (per-stream, FPS-aware queue size)
-	// CRITICAL: Pass FramePool so encoding thread can release frames after encoding
-	// Without this, frame pool will exhaust and streaming will stop!
-	const int32 MaxQueueSize = Config.GetFrameQueueSize();
-	UE_LOG(LogTemp, Log, TEXT("StreamingPipeline: Creating encoding thread (MaxQueueSize=%d)..."), MaxQueueSize);
-	EncodingThread = MakeUnique<FEncodingThread>(StreamID, HardwareEncoder, FramePool, MaxQueueSize);
-
-	// Register NAL callback
-	EncodingThread->SetNALEncodedCallback(
-		FEncodingThread::FOnNALUnitsEncoded::CreateRaw(this, &FStreamingPipeline::OnNALUnitsEncoded)
-	);
+	// NOTE: HardwareEncoder and EncodingThread are created lazily in Start()
+	// This prevents NVENC resource allocation when streaming is never used
 
 	// Validate SceneCapture weak pointer
 	if (!SceneCapture.IsValid())
@@ -306,6 +289,33 @@ bool FStreamingPipeline::Start(FString& OutRTSPURL)
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("StreamingPipeline: Starting stream %s..."), *StreamID.ToString());
+
+	// LAZY INITIALIZATION: Create encoder and thread only when streaming actually starts
+	// This prevents NVENC crash when vehicle is destroyed without ever streaming
+	if (!HardwareEncoder)
+	{
+		UE_LOG(LogTemp, Log, TEXT("StreamingPipeline: Creating hardware encoder (lazy init)..."));
+		FString EncoderError;
+		HardwareEncoder = MakeShared<FHardwareEncoderWrapper>();
+		if (!HardwareEncoder->Initialize(EncoderConfig, EncoderError))
+		{
+			UE_LOG(LogTemp, Error, TEXT("StreamingPipeline: Failed to create encoder - %s"), *EncoderError);
+			HardwareEncoder.Reset();
+			return false;
+		}
+	}
+
+	if (!EncodingThread)
+	{
+		const int32 MaxQueueSize = Config.GetFrameQueueSize();
+		UE_LOG(LogTemp, Log, TEXT("StreamingPipeline: Creating encoding thread (lazy init, MaxQueueSize=%d)..."), MaxQueueSize);
+		EncodingThread = MakeUnique<FEncodingThread>(StreamID, HardwareEncoder, FramePool, MaxQueueSize);
+
+		// Register NAL callback
+		EncodingThread->SetNALEncodedCallback(
+			FEncodingThread::FOnNALUnitsEncoded::CreateRaw(this, &FStreamingPipeline::OnNALUnitsEncoded)
+		);
+	}
 
 	// Start encoding thread
 	if (!EncodingThread->Start())
