@@ -11,6 +11,7 @@
 #include "Engine/DataTable.h"
 #include "DataStreamProcessor.h"
 #include "VehiclePoolManager.h"
+#include "VehicleBasePawn.h"
 #include "RealGazeboBridge.h"
 
 UGazeboBridgeSubsystem::UGazeboBridgeSubsystem()

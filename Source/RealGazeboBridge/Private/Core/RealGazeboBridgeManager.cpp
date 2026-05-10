@@ -7,6 +7,8 @@
 
 #include "Core/RealGazeboBridgeManager.h"
 #include "Core/GazeboBridgeSubsystem.h"
+#include "VehiclePoolManager.h"
+#include "DataStreamProcessor.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 
