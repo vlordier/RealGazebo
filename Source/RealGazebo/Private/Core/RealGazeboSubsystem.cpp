@@ -109,12 +109,6 @@ bool URealGazeboSubsystem::InitializeAllSubsystems()
         bSuccess &= InitializeUISubsystem();
     }
 
-    // Initialize Streaming subsystem if enabled
-    if (CachedSettings->bEnableStreaming)
-    {
-        bSuccess &= InitializeStreamingSubsystem();
-    }
-
     if (bSuccess)
     {
         bIsActive = true;
@@ -145,12 +139,6 @@ void URealGazeboSubsystem::ShutdownAllSubsystems()
     if (URealGazeboUISubsystem* UI = GetUISubsystem())
     {
         // UI has its own shutdown logic
-    }
-
-    // Shutdown Streaming subsystem
-    if (URealGazeboStreamingSubsystem* Streaming = GetStreamingSubsystem())
-    {
-        // Streaming has its own shutdown logic
     }
 }
 
@@ -183,18 +171,6 @@ URealGazeboUISubsystem* URealGazeboSubsystem::GetUISubsystem() const
     return nullptr;
 }
 
-URealGazeboStreamingSubsystem* URealGazeboSubsystem::GetStreamingSubsystem() const
-{
-    if (UWorld* World = GetWorld())
-    {
-        if (UGameInstance* GameInstance = World->GetGameInstance())
-        {
-            return GameInstance->GetSubsystem<URealGazeboStreamingSubsystem>();
-        }
-    }
-    return nullptr;
-}
-
 bool URealGazeboSubsystem::IsBridgeAvailable() const
 {
     UGazeboBridgeSubsystem* Bridge = GetBridgeSubsystem();
@@ -205,12 +181,6 @@ bool URealGazeboSubsystem::IsUIAvailable() const
 {
     URealGazeboUISubsystem* UI = GetUISubsystem();
     return UI != nullptr;
-}
-
-bool URealGazeboSubsystem::IsStreamingAvailable() const
-{
-    URealGazeboStreamingSubsystem* Streaming = GetStreamingSubsystem();
-    return Streaming != nullptr;
 }
 
 //----------------------------------------------------------
@@ -347,54 +317,6 @@ void URealGazeboSubsystem::SetMainWidgetVisibility(bool bVisible)
 }
 
 //----------------------------------------------------------
-// Unified API Functions (Streaming Operations)
-//----------------------------------------------------------
-
-bool URealGazeboSubsystem::StartRTSPServer(int32 Port)
-{
-    if (URealGazeboStreamingSubsystem* Streaming = GetStreamingSubsystem())
-    {
-        return Streaming->StartRTSPServer(Port);
-    }
-    return false;
-}
-
-void URealGazeboSubsystem::StopRTSPServer()
-{
-    if (URealGazeboStreamingSubsystem* Streaming = GetStreamingSubsystem())
-    {
-        Streaming->StopRTSPServer();
-    }
-}
-
-bool URealGazeboSubsystem::IsRTSPServerRunning() const
-{
-    if (URealGazeboStreamingSubsystem* Streaming = GetStreamingSubsystem())
-    {
-        return Streaming->IsRTSPServerRunning();
-    }
-    return false;
-}
-
-int32 URealGazeboSubsystem::GetActiveStreamCount() const
-{
-    if (URealGazeboStreamingSubsystem* Streaming = GetStreamingSubsystem())
-    {
-        return Streaming->GetActiveStreamCount();
-    }
-    return 0;
-}
-
-int32 URealGazeboSubsystem::GetRegisteredCameraCount() const
-{
-    if (URealGazeboStreamingSubsystem* Streaming = GetStreamingSubsystem())
-    {
-        return Streaming->GetRegisteredCameraCount();
-    }
-    return 0;
-}
-
-//----------------------------------------------------------
 // Internal Methods
 //----------------------------------------------------------
 
@@ -424,23 +346,10 @@ bool URealGazeboSubsystem::InitializeUISubsystem()
     return true;
 }
 
-bool URealGazeboSubsystem::InitializeStreamingSubsystem()
-{
-    URealGazeboStreamingSubsystem* Streaming = GetStreamingSubsystem();
-    if (!Streaming)
-    {
-        UE_LOG(LogRealGazebo, Error, TEXT("Streaming subsystem not found"));
-        return false;
-    }
-
-    UE_LOG(LogRealGazebo, Log, TEXT("Streaming subsystem initialized successfully"));
-    return true;
-}
-
 void URealGazeboSubsystem::UpdateSubsystemState()
 {
     // Simple state update - just check if subsystems are available
-    bIsActive = IsBridgeAvailable() && IsUIAvailable() && IsStreamingAvailable();
+    bIsActive = IsBridgeAvailable() && IsUIAvailable();
 }
 
 void URealGazeboSubsystem::OnBridgeStateChanged()
@@ -452,12 +361,6 @@ void URealGazeboSubsystem::OnBridgeStateChanged()
 void URealGazeboSubsystem::OnUIStateChanged()
 {
     // Handle UI subsystem state changes
-    UpdateSubsystemState();
-}
-
-void URealGazeboSubsystem::OnStreamingStateChanged()
-{
-    // Handle Streaming subsystem state changes
     UpdateSubsystemState();
 }
 

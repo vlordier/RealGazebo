@@ -10,7 +10,6 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "GazeboBridgeSubsystem.h"
 #include "RealGazeboUISubsystem.h"
-#include "RealGazeboStreamingSubsystem.h"
 #include "RealGazeboSubsystem.generated.h"
 
 // Forward declarations
@@ -71,10 +70,6 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Subsystems")
     URealGazeboUISubsystem* GetUISubsystem() const;
 
-    /** Get Streaming subsystem (may be null if disabled) */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Subsystems")
-    URealGazeboStreamingSubsystem* GetStreamingSubsystem() const;
-
     /** Check if Bridge subsystem is available and active */
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Subsystems")
     bool IsBridgeAvailable() const;
@@ -82,10 +77,6 @@ public:
     /** Check if UI subsystem is available and active */
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Subsystems")
     bool IsUIAvailable() const;
-
-    /** Check if Streaming subsystem is available and active */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Subsystems")
-    bool IsStreamingAvailable() const;
 
     //----------------------------------------------------------
     // Manager Registration
@@ -141,30 +132,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI")
     void SetMainWidgetVisibility(bool bVisible);
 
-    //----------------------------------------------------------
-    // Unified API Functions (Streaming Operations)
-    //----------------------------------------------------------
-
-    /** Start RTSP streaming server */
-    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-    bool StartRTSPServer(int32 Port = 8554);
-
-    /** Stop RTSP streaming server */
-    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming")
-    void StopRTSPServer();
-
-    /** Check if RTSP server is running */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Streaming")
-    bool IsRTSPServerRunning() const;
-
-    /** Get number of active streams */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Streaming")
-    int32 GetActiveStreamCount() const;
-
-    /** Get number of registered cameras waiting to stream */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Streaming")
-    int32 GetRegisteredCameraCount() const;
-
 
 protected:
     //----------------------------------------------------------
@@ -194,9 +161,6 @@ protected:
     /** Initialize UI subsystem if enabled */
     bool InitializeUISubsystem();
 
-    /** Initialize Streaming subsystem if enabled */
-    bool InitializeStreamingSubsystem();
-
     /** Update subsystem state based on component states */
     void UpdateSubsystemState();
 
@@ -207,10 +171,6 @@ protected:
     /** Handle UI subsystem events */
     UFUNCTION()
     void OnUIStateChanged();
-
-    /** Handle Streaming subsystem events */
-    UFUNCTION()
-    void OnStreamingStateChanged();
 
 
 };

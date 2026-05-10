@@ -80,30 +80,6 @@ public:
     bool bEnableMainWidget = true;
 
     //----------------------------------------------------------
-    // Streaming Settings
-    //----------------------------------------------------------
-
-    /** Enable Streaming component by default */
-    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Streaming", meta = (DisplayName = "Enable Streaming"))
-    bool bEnableStreaming = true;
-
-    /** RTSP server port for video streaming */
-    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Streaming|Network", meta = (DisplayName = "RTSP Port", ClampMin = "1024", ClampMax = "65535", EditCondition = "bEnableStreaming"))
-    int32 RTSPPort = 8554;
-
-    /** Enable automatic RTSP server startup */
-    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Streaming|Network", meta = (DisplayName = "Auto Start RTSP", EditCondition = "bEnableStreaming"))
-    bool bAutoStartRTSP = true;
-
-    /** Default stream resolution (XGA 1024x768 recommended for robotics) */
-    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Streaming|Video", meta = (DisplayName = "Stream Resolution", EditCondition = "bEnableStreaming"))
-    int32 DefaultStreamResolution = 2;  // 0=VGA, 1=SVGA, 2=XGA, 3=SXGA, 4=UXGA
-
-    /** Default stream frame rate */
-    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Streaming|Video", meta = (DisplayName = "Stream FPS", ClampMin = "15", ClampMax = "60", EditCondition = "bEnableStreaming"))
-    int32 DefaultStreamFPS = 30;
-
-    //----------------------------------------------------------
     // Performance Settings
     //----------------------------------------------------------
 

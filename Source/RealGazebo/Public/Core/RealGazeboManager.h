@@ -17,7 +17,6 @@
 // Forward declarations
 class UGazeboBridgeSubsystem;
 class URealGazeboUISubsystem;
-class URealGazeboStreamingSubsystem;
 class ARealGazeboViewerDirector;
 
 /**
@@ -207,31 +206,6 @@ public:
     bool bAlwaysShowMouseCursor = true;
 
     //----------------------------------------------------------
-    // Streaming Configuration - RTSP Video Streaming
-    //----------------------------------------------------------
-
-    /** Auto-start RTSP server when level begins */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Streaming",
-              meta = (DisplayName = "Auto Start RTSP Server", DisplayPriority = "1"))
-    bool bAutoStartRTSP = true;
-
-    /** RTSP server port */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Streaming|Network",
-              meta = (DisplayName = "RTSP Port", DisplayPriority = "1", ClampMin = "1024", ClampMax = "65535"))
-    int32 RTSPPort = 8554;
-
-    /** Default stream resolution (0=VGA 640x480, 1=SVGA 800x600, 2=XGA 1024x768, 3=SXGA 1280x960, 4=UXGA 1600x1200) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Streaming|Video",
-              meta = (DisplayName = "Stream Resolution", DisplayPriority = "1", ClampMin = "0", ClampMax = "4",
-                     ToolTip = "0=VGA 640x480, 1=SVGA 800x600, 2=XGA 1024x768 (recommended), 3=SXGA 1280x960, 4=UXGA 1600x1200"))
-    int32 StreamResolution = 2;  // XGA 1024x768 default
-
-    /** Default stream frame rate */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RealGazebo|Streaming|Video",
-              meta = (DisplayName = "Stream FPS", DisplayPriority = "2", ClampMin = "15", ClampMax = "60"))
-    int32 StreamFPS = 30;
-
-    //----------------------------------------------------------
     // Bridge Control API
     //----------------------------------------------------------
 
@@ -274,30 +248,6 @@ public:
     /** Force mouse cursor visibility state */
     UFUNCTION(BlueprintCallable, Category = "RealGazebo|UI Control", meta = (DisplayName = "Set Mouse Always Visible"))
     void SetMouseCursorAlwaysVisible(bool bVisible);
-
-    //----------------------------------------------------------
-    // Streaming Control API
-    //----------------------------------------------------------
-
-    /** Start RTSP streaming server (manual control) */
-    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming Control", meta = (DisplayName = "Start RTSP Server"))
-    bool StartRTSPServer();
-
-    /** Stop RTSP streaming server */
-    UFUNCTION(BlueprintCallable, Category = "RealGazebo|Streaming Control", meta = (DisplayName = "Stop RTSP Server"))
-    void StopRTSPServer();
-
-    /** Check if RTSP server is running */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Streaming Control", meta = (DisplayName = "Is RTSP Server Running"))
-    bool IsRTSPServerRunning() const;
-
-    /** Get number of active streams */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Streaming Control", meta = (DisplayName = "Get Active Stream Count"))
-    int32 GetActiveStreamCount() const;
-
-    /** Get number of registered cameras waiting to stream */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RealGazebo|Streaming Control", meta = (DisplayName = "Get Registered Camera Count"))
-    int32 GetRegisteredCameraCount() const;
 
     //----------------------------------------------------------
     // Status Information API
@@ -400,18 +350,11 @@ protected:
     UPROPERTY()
     TWeakObjectPtr<URealGazeboUISubsystem> UISubsystem;
 
-    /** Reference to the streaming subsystem we're controlling */
-    UPROPERTY()
-    TWeakObjectPtr<URealGazeboStreamingSubsystem> StreamingSubsystem;
-
     /** Track if we started the bridge subsystem */
     bool bDidStartBridge = false;
 
     /** Track if we started the UI subsystem */
     bool bDidStartUI = false;
-
-    /** Track if we started the streaming subsystem */
-    bool bDidStartRTSP = false;
 
     /** Reference to created viewer director */
     UPROPERTY()
@@ -437,14 +380,6 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RealGazebo|Status", meta = (DisplayName = "Widget In Viewport"))
     bool WidgetInViewportStatus = false;
 
-    /** Streaming status display for debugging */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RealGazebo|Status", meta = (DisplayName = "Streaming Status"))
-    FString StreamingStatus = TEXT("Not Started");
-
-    /** Active streams count for display */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RealGazebo|Status", meta = (DisplayName = "Active Streams"))
-    int32 ActiveStreamsCount = 0;
-
     //----------------------------------------------------------
     // Internal Methods
     //----------------------------------------------------------
@@ -454,9 +389,6 @@ protected:
 
     /** Configure the UI subsystem with our settings */
     void ConfigureUISubsystem();
-
-    /** Configure the streaming subsystem with our settings */
-    void ConfigureStreamingSubsystem();
 
     /** Configure vehicle pool management settings */
     void ConfigureVehiclePoolSettings();

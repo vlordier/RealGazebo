@@ -17,7 +17,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogRealGazebo, Log, All);
  * RealGazebo Main Module
  *
  * Purpose:
- * - Provides unified dependency on RealGazeboBridge, RealGazeboUI, and RealGazeboStreaming
+ * - Provides unified dependency on RealGazeboBridge and RealGazeboUI
  * - Simple module with no additional functionality (all logic is in sub-modules)
  * - Engine automatically loads all modules based on .uplugin file
  */

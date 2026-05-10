@@ -9,7 +9,6 @@
 #include "Engine/World.h"
 #include "GazeboBridgeSubsystem.h"
 #include "RealGazeboUISubsystem.h"
-#include "RealGazeboStreamingSubsystem.h"
 #include "Vehicles/VehiclePoolManager.h"
 #include "ViewerController/RealGazeboViewerDirector.h"
 #include "Engine/Engine.h"
@@ -29,7 +28,6 @@ ARealGazeboManager::ARealGazeboManager()
     // Initialize state
     bDidStartBridge = false;
     bDidStartUI = false;
-    bDidStartRTSP = false;
 
     // MainWidgetClass should be set manually by user in Details panel
     MainWidgetClass = nullptr;
@@ -37,7 +35,6 @@ ARealGazeboManager::ARealGazeboManager()
     // Clear subsystem references
     BridgeSubsystem = nullptr;
     UISubsystem = nullptr;
-    StreamingSubsystem = nullptr;
     ViewerDirector = nullptr;
 
     // Initialize runtime DataTables
@@ -112,7 +109,6 @@ void ARealGazeboManager::BeginPlay()
     {
         BridgeSubsystem = GameInstance->GetSubsystem<UGazeboBridgeSubsystem>();
         UISubsystem = GameInstance->GetSubsystem<URealGazeboUISubsystem>();
-        StreamingSubsystem = GameInstance->GetSubsystem<URealGazeboStreamingSubsystem>();
 
         if (!BridgeSubsystem.IsValid())
         {
@@ -122,11 +118,6 @@ void ARealGazeboManager::BeginPlay()
         if (!UISubsystem.IsValid())
         {
             UE_LOG(LogRealGazebo, Warning, TEXT("UI subsystem not found - UI features disabled"));
-        }
-
-        if (!StreamingSubsystem.IsValid())
-        {
-            UE_LOG(LogRealGazebo, Warning, TEXT("Streaming subsystem not found - Streaming features disabled"));
         }
     }
     else
@@ -138,7 +129,6 @@ void ARealGazeboManager::BeginPlay()
     // Configure subsystems with our settings
     ConfigureBridgeSubsystem();
     ConfigureUISubsystem();
-    ConfigureStreamingSubsystem();
 
     // Auto-start bridge if enabled
     if (bAutoStartBridge)
@@ -150,12 +140,6 @@ void ARealGazeboManager::BeginPlay()
     if (bAutoCreateUI)
     {
         InitializeCameraUI();
-    }
-
-    // Auto-start RTSP server if enabled
-    if (bAutoStartRTSP)
-    {
-        StartRTSPServer();
     }
 
     // Start periodic status updates
@@ -178,16 +162,9 @@ void ARealGazeboManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
         StopBridge();
     }
 
-    // Stop RTSP server if we started it
-    if (bDidStartRTSP)
-    {
-        StopRTSPServer();
-    }
-
     // Clear references
     BridgeSubsystem = nullptr;
     UISubsystem = nullptr;
-    StreamingSubsystem = nullptr;
     ViewerDirector = nullptr;
 
     Super::EndPlay(EndPlayReason);
@@ -205,11 +182,10 @@ void ARealGazeboManager::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
     Super::PostEditChangeProperty(PropertyChangedEvent);
 
     // Reconfigure subsystems when properties change
-    if (PropertyChangedEvent.Property != nullptr && (BridgeSubsystem.IsValid() || UISubsystem.IsValid() || StreamingSubsystem.IsValid()))
+    if (PropertyChangedEvent.Property != nullptr && (BridgeSubsystem.IsValid() || UISubsystem.IsValid()))
     {
         ConfigureBridgeSubsystem();
         ConfigureUISubsystem();
-        ConfigureStreamingSubsystem();
     }
 }
 #endif
@@ -506,70 +482,6 @@ void ARealGazeboManager::SetMainWidgetVisibility(bool bVisible)
 }
 
 //----------------------------------------------------------
-// Streaming Control API
-//----------------------------------------------------------
-
-bool ARealGazeboManager::StartRTSPServer()
-{
-    if (!StreamingSubsystem.IsValid())
-    {
-        UE_LOG(LogRealGazebo, Error, TEXT("Cannot start RTSP - Streaming subsystem not available"));
-        StreamingStatus = TEXT("Error - No Subsystem");
-        return false;
-    }
-
-    if (StreamingSubsystem->StartRTSPServer(RTSPPort))
-    {
-        bDidStartRTSP = true;
-        StreamingStatus = TEXT("Active");
-        UE_LOG(LogRealGazebo, Log, TEXT("RTSP server started on port %d"), RTSPPort);
-        return true;
-    }
-
-    StreamingStatus = TEXT("Failed to Start");
-    UE_LOG(LogRealGazebo, Error, TEXT("Failed to start RTSP server on port %d"), RTSPPort);
-    return false;
-}
-
-void ARealGazeboManager::StopRTSPServer()
-{
-    if (StreamingSubsystem.IsValid())
-    {
-        StreamingSubsystem->StopRTSPServer();
-        bDidStartRTSP = false;
-        StreamingStatus = TEXT("Stopped");
-        UE_LOG(LogRealGazebo, Log, TEXT("RTSP server stopped"));
-    }
-}
-
-bool ARealGazeboManager::IsRTSPServerRunning() const
-{
-    if (StreamingSubsystem.IsValid())
-    {
-        return StreamingSubsystem->IsRTSPServerRunning();
-    }
-    return false;
-}
-
-int32 ARealGazeboManager::GetActiveStreamCount() const
-{
-    if (StreamingSubsystem.IsValid())
-    {
-        return StreamingSubsystem->GetActiveStreamCount();
-    }
-    return 0;
-}
-
-int32 ARealGazeboManager::GetRegisteredCameraCount() const
-{
-    if (StreamingSubsystem.IsValid())
-    {
-        return StreamingSubsystem->GetRegisteredCameraCount();
-    }
-    return 0;
-}
-
-//----------------------------------------------------------
 // Configuration Methods
 //----------------------------------------------------------
 
@@ -600,21 +512,6 @@ void ARealGazeboManager::ConfigureUISubsystem()
 
     // Configure UI subsystem with our settings
     // Note: Actual configuration would depend on UISubsystem's API
-}
-
-void ARealGazeboManager::ConfigureStreamingSubsystem()
-{
-    if (!StreamingSubsystem.IsValid())
-    {
-        return;
-    }
-
-    UE_LOG(LogRealGazebo, Log, TEXT("Configuring Streaming Subsystem"));
-
-    // Configure streaming subsystem with our settings
-    // Currently, RealGazeboStreamingSubsystem doesn't require pre-initialization configuration
-    // RTSP server will be started in BeginPlay if bAutoStartRTSP is true
-    // Stream resolution and FPS are configured per-camera in UVehicleCameraComponent
 }
 
 void ARealGazeboManager::ConfigureVehiclePoolSettings()
@@ -827,28 +724,5 @@ void ARealGazeboManager::UpdateStatusDisplay()
     {
         UIStatus = TEXT("No Subsystem");
         WidgetInViewportStatus = false;
-    }
-
-    // Update streaming status
-    if (StreamingSubsystem.IsValid())
-    {
-        if (StreamingSubsystem->IsRTSPServerRunning())
-        {
-            ActiveStreamsCount = StreamingSubsystem->GetActiveStreamCount();
-            int32 RegisteredCameras = StreamingSubsystem->GetRegisteredCameraCount();
-
-            StreamingStatus = FString::Printf(TEXT("Active (%d/%d streams)"),
-                ActiveStreamsCount, RegisteredCameras);
-        }
-        else
-        {
-            StreamingStatus = bDidStartRTSP ? TEXT("Stopped") : TEXT("Not Started");
-            ActiveStreamsCount = 0;
-        }
-    }
-    else
-    {
-        StreamingStatus = TEXT("No Subsystem");
-        ActiveStreamsCount = 0;
     }
 }

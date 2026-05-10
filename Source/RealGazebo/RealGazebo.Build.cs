@@ -27,8 +27,7 @@ public class RealGazebo : ModuleRules
             "Engine",
             "UMG",
             "RealGazeboBridge",
-            "RealGazeboUI",
-            "RealGazeboStreaming"
+            "RealGazeboUI"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]
