@@ -115,6 +115,19 @@ public:
     /** Get vehicle configuration from DataTable (for internal use) */
     const FBridgeVehicleConfigRow* GetVehicleConfigInternal(uint8 VehicleType) const;
 
+    /**
+     * Push the merged vehicle config set from a higher-level orchestrator
+     * (typically ARealGazeboManager pulling from UVehicleRegistrySubsystem).
+     *
+     * Configs pushed here take precedence over VehicleConfigTable. The legacy
+     * VehicleConfigTable path remains as a fallback so that ARealGazeboBridgeManager
+     * users (who don't push) continue to work without the mod registry.
+     */
+    void PushVehicleConfigs(const TMap<uint8, FBridgeVehicleConfigRow>& InConfigs);
+
+    /** Discard the pushed cache so lookups fall back to VehicleConfigTable. */
+    void ClearPushedVehicleConfigs();
+
     /** Get vehicle pool manager for configuration */
     UFUNCTION(BlueprintCallable, Category = "Bridge|Access")
     UVehiclePoolManager* GetVehiclePoolManager() const { return VehiclePool; }
@@ -231,6 +244,14 @@ protected:
     void OnAdditionalDataReceived(const FBridgeAdditionalData& AdditionalData);
 
 private:
+    /**
+     * In-memory cache pushed by ARealGazeboManager from the central
+     * UVehicleRegistrySubsystem (core DT + merged mod DTs). When non-empty,
+     * GetVehicleConfigInternal hits this map instead of scanning VehicleConfigTable,
+     * which gives mod rows a way to be visible without touching the core asset.
+     */
+    TMap<uint8, FBridgeVehicleConfigRow> PushedVehicleConfigs;
+
     /** Bridge active state (thread-safe atomic) */
     std::atomic<bool> bIsBridgeActive;
 

@@ -17,6 +17,7 @@
 // Forward declarations
 class UGazeboBridgeSubsystem;
 class URealGazeboUISubsystem;
+class UVehicleRegistrySubsystem;
 class ARealGazeboViewerDirector;
 
 /**
@@ -406,14 +407,19 @@ protected:
     void ConfigureBridgePoolSettings();
 
     //----------------------------------------------------------
-    // DataTable Conversion Helpers
+    // Registry synchronization
     //----------------------------------------------------------
 
-    /** Create a Bridge-compatible DataTable from unified configuration */
-    UDataTable* CreateBridgeCompatibleDataTable();
+    /**
+     * Pull the merged vehicle set from UVehicleRegistrySubsystem and push it
+     * to UGazeboBridgeSubsystem + URealGazeboUISubsystem. Called once after
+     * RegisterCoreSource (covers the core-only case if mod scan hasn't completed
+     * yet) and again on OnRegistryUpdated (covers the mod scan finishing later).
+     */
+    void SyncBridgeSubsystemFromRegistry();
 
-    /** Create a UI-compatible DataTable from unified configuration */
-    UDataTable* CreateUICompatibleDataTable();
+    /** Bound to UVehicleRegistrySubsystem::OnRegistryUpdated. */
+    void HandleRegistryUpdated();
 
     //----------------------------------------------------------
     // Validation Methods
@@ -434,12 +440,4 @@ protected:
 private:
     /** Timer for periodic status updates */
     FTimerHandle StatusUpdateTimer;
-
-    /** Runtime-created DataTable for Bridge subsystem (converted from unified) */
-    UPROPERTY()
-    TObjectPtr<UDataTable> RuntimeBridgeDataTable;
-
-    /** Runtime-created DataTable for UI subsystem (converted from unified) */
-    UPROPERTY()
-    TObjectPtr<UDataTable> RuntimeUIDataTable;
 };

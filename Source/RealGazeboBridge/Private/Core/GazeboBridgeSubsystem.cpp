@@ -414,14 +414,24 @@ void UGazeboBridgeSubsystem::GetPerformanceStats(int32& OutTotalVehicles, int32&
 
 const FBridgeVehicleConfigRow* UGazeboBridgeSubsystem::GetVehicleConfigInternal(uint8 VehicleType) const
 {
+    // Preferred path: configs pushed by ARealGazeboManager from the central
+    // VehicleRegistrySubsystem (which merges core + mod DataTables).
+    if (const FBridgeVehicleConfigRow* Cached = PushedVehicleConfigs.Find(VehicleType))
+    {
+        return Cached;
+    }
+
+    // Legacy fallback: scan the directly-assigned DataTable. This keeps the
+    // ARealGazeboBridgeManager (Old Version actor) path working without
+    // requiring users to migrate to the unified manager + registry.
     if (!VehicleConfigTable)
     {
         return nullptr;
     }
-    
+
     TArray<FBridgeVehicleConfigRow*> AllRows;
     VehicleConfigTable->GetAllRows<FBridgeVehicleConfigRow>(TEXT("GetVehicleConfig"), AllRows);
-    
+
     for (FBridgeVehicleConfigRow* Row : AllRows)
     {
         if (Row && Row->VehicleTypeCode == VehicleType)
@@ -429,8 +439,20 @@ const FBridgeVehicleConfigRow* UGazeboBridgeSubsystem::GetVehicleConfigInternal(
             return Row;
         }
     }
-    
+
     return nullptr;
+}
+
+void UGazeboBridgeSubsystem::PushVehicleConfigs(const TMap<uint8, FBridgeVehicleConfigRow>& InConfigs)
+{
+    PushedVehicleConfigs = InConfigs;
+    UE_LOG(LogRealGazeboBridge, Log, TEXT("BridgeSubsystem: pushed %d vehicle configs from registry"),
+           PushedVehicleConfigs.Num());
+}
+
+void UGazeboBridgeSubsystem::ClearPushedVehicleConfigs()
+{
+    PushedVehicleConfigs.Empty();
 }
 
 void UGazeboBridgeSubsystem::SpawnVehiclePawn(const FVehicleID& VehicleID, FVehicleRuntimeData& VehicleData)

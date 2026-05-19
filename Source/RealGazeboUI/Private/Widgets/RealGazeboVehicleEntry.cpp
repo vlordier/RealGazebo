@@ -9,7 +9,9 @@
 #include "Components/Image.h"
 #include "Engine/World.h"
 #include "Engine/DataTable.h"
+#include "Engine/Texture2D.h"
 #include "RealGazeboUI.h"
+#include "Core/RealGazeboUISubsystem.h"
 #include "Data/VehicleTypeImageData.h"
 #include "Widgets/RealGazeboMainWidget.h"
 
@@ -312,48 +314,34 @@ void URealGazeboVehicleEntry::UpdateVehicleTypeImage()
 
 UTexture2D* URealGazeboVehicleEntry::GetVehicleTypeImageFromDataTable(uint8 VehicleTypeCode) const
 {
-    if (!VehicleTypeImageDataTable)
+    // Preferred path: ask the UI subsystem, which holds the merged image map
+    // pushed by ARealGazeboManager from UVehicleRegistrySubsystem (core + mod DTs).
+    if (URealGazeboUISubsystem* UISubsystem = URealGazeboUISubsystem::GetUISubsystem(this))
     {
-        // DataTable is NULL
-        return nullptr;
-    }
-    
-    // Get all rows from the data table
-    TArray<FVehicleTypeImageRow*> AllRows;
-    VehicleTypeImageDataTable->GetAllRows<FVehicleTypeImageRow>(TEXT("GetVehicleTypeImageFromDataTable"), AllRows);
-    
-    // Search data table for vehicle type
-    
-    // Find the row with matching vehicle type code
-    for (const FVehicleTypeImageRow* Row : AllRows)
-    {
-        if (Row && Row->VehicleTypeCode == VehicleTypeCode)
+        if (UTexture2D* Image = UISubsystem->GetVehicleImage(VehicleTypeCode))
         {
-            // Found matching row
-            
-            // Load the soft object pointer
-            if (Row->VehicleImage.IsValid())
-            {
-                UTexture2D* LoadedImage = Row->VehicleImage.LoadSynchronous();
-                // Image already loaded
-                return LoadedImage;
-            }
-            else if (!Row->VehicleImage.IsNull())
-            {
-                // Try to load if not already loaded
-                UTexture2D* LoadedImage = Row->VehicleImage.LoadSynchronous();
-                // Loading image synchronously
-                return LoadedImage;
-            }
-            else
-            {
-                // Row found but VehicleImage is NULL
-            }
-            break;
+            return Image;
         }
     }
-    
-    // No matching row found
+
+    // Legacy fallback: if this widget instance was given a DataTable directly
+    // (e.g. by ARealGazeboCameraUIManager which doesn't go through the registry),
+    // scan it the old way. Kept for backward compatibility.
+    if (VehicleTypeImageDataTable)
+    {
+        TArray<FVehicleTypeImageRow*> AllRows;
+        VehicleTypeImageDataTable->GetAllRows<FVehicleTypeImageRow>(
+            TEXT("GetVehicleTypeImageFromDataTable"), AllRows);
+
+        for (const FVehicleTypeImageRow* Row : AllRows)
+        {
+            if (Row && Row->VehicleTypeCode == VehicleTypeCode && !Row->VehicleImage.IsNull())
+            {
+                return Row->VehicleImage.LoadSynchronous();
+            }
+        }
+    }
+
     return nullptr;
 }
 

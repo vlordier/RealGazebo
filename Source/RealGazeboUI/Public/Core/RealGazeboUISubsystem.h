@@ -144,6 +144,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RealGazebo UI|Access", meta = (CallInEditor = "true"))
     static URealGazeboUISubsystem* GetUISubsystem(const UObject* WorldContext);
 
+    //----------------------------------------------------------
+    // Vehicle Image Registry (mod-aware lookup for widgets)
+    //----------------------------------------------------------
+
+    /**
+     * Push the merged VehicleTypeCode -> image map from a higher-level orchestrator
+     * (typically ARealGazeboManager pulling from UVehicleRegistrySubsystem).
+     *
+     * Widgets call GetVehicleImage(code) instead of scanning a DataTable directly,
+     * which makes mod-supplied vehicle icons just work.
+     */
+    void PushVehicleImageMap(const TMap<uint8, TSoftObjectPtr<UTexture2D>>& InImages);
+
+    /** Sync-load and return the icon texture for a type code. Returns nullptr if unknown. */
+    UFUNCTION(BlueprintCallable, Category = "RealGazebo UI|Vehicle Images")
+    UTexture2D* GetVehicleImage(uint8 VehicleTypeCode);
+
 protected:
     //----------------------------------------------------------
     // Core Data
@@ -192,4 +209,11 @@ protected:
 private:
     /** Cached world reference */
     TWeakObjectPtr<UWorld> CachedWorld;
+
+    /**
+     * Pushed by ARealGazeboManager from the central VehicleRegistrySubsystem.
+     * Widgets ask this map for icons via GetVehicleImage, which removes the
+     * need for each widget instance to hold its own DataTable reference.
+     */
+    TMap<uint8, TSoftObjectPtr<UTexture2D>> VehicleImageMap;
 };

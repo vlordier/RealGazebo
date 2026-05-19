@@ -34,7 +34,10 @@ public class RealGazebo : ModuleRules
         {
             "Slate",
             "SlateCore",
-            "DeveloperSettings"
+            "DeveloperSettings",
+            "AssetRegistry",
+            "PakFile",
+            "RenderCore"
         });
 
         if (Target.bBuildEditor)

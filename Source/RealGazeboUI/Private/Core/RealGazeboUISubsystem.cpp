@@ -8,6 +8,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Engine/Texture2D.h"
 #include "GameFramework/PlayerController.h"
 #include "ViewerController/RealGazeboViewerDirector.h"
 #include "Widgets/RealGazeboMainWidget.h"
@@ -400,4 +401,25 @@ void URealGazeboUISubsystem::InternalCleanup()
     }
 
     UIStatus = TEXT("Cleaned Up");
+}
+
+//----------------------------------------------------------
+// Vehicle image registry
+//----------------------------------------------------------
+
+void URealGazeboUISubsystem::PushVehicleImageMap(const TMap<uint8, TSoftObjectPtr<UTexture2D>>& InImages)
+{
+    VehicleImageMap = InImages;
+    UE_LOG(LogRealGazeboUISubsystem, Log, TEXT("UISubsystem: pushed %d vehicle image entries"),
+           VehicleImageMap.Num());
+}
+
+UTexture2D* URealGazeboUISubsystem::GetVehicleImage(uint8 VehicleTypeCode)
+{
+    const TSoftObjectPtr<UTexture2D>* Found = VehicleImageMap.Find(VehicleTypeCode);
+    if (!Found || Found->IsNull())
+    {
+        return nullptr;
+    }
+    return Found->LoadSynchronous();
 }

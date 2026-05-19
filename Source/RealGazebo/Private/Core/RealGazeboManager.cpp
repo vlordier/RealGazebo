@@ -10,12 +10,14 @@
 #include "GazeboBridgeSubsystem.h"
 #include "RealGazeboUISubsystem.h"
 #include "Vehicles/VehiclePoolManager.h"
+#include "Vehicles/VehicleBasePawn.h"
 #include "ViewerController/RealGazeboViewerDirector.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Components/Widget.h"
 #include "Blueprint/UserWidget.h"
+#include "Core/VehicleRegistrySubsystem.h"
 #include "Data/RealGazeboVehicleData.h"
 #include "Data/VehicleTypeImageData.h"
 
@@ -36,10 +38,6 @@ ARealGazeboManager::ARealGazeboManager()
     BridgeSubsystem = nullptr;
     UISubsystem = nullptr;
     ViewerDirector = nullptr;
-
-    // Initialize runtime DataTables
-    RuntimeBridgeDataTable = nullptr;
-    RuntimeUIDataTable = nullptr;
 
     // Initialize default camera presets
     CameraPresets.Empty();
@@ -118,6 +116,21 @@ void ARealGazeboManager::BeginPlay()
         if (!UISubsystem.IsValid())
         {
             UE_LOG(LogRealGazebo, Warning, TEXT("UI subsystem not found - UI features disabled"));
+        }
+
+        // Register this actor's user-assigned DataTable as the authoritative core source
+        // for the vehicle registry. Mod DataTables discovered via AssetRegistry will be
+        // merged on top, with this core source taking precedence on VehicleTypeCode conflicts.
+        if (UVehicleRegistrySubsystem* Registry = GameInstance->GetSubsystem<UVehicleRegistrySubsystem>())
+        {
+            Registry->RegisterCoreSource(UnifiedVehicleDataTable);
+
+            // Push the current registry state down to the bridge subsystem so spawn
+            // lookups hit the merged set instead of just the legacy DataTable.
+            SyncBridgeSubsystemFromRegistry();
+
+            // The mod AssetRegistry scan may still be in flight - re-sync when it completes.
+            Registry->OnRegistryUpdated.AddUObject(this, &ARealGazeboManager::HandleRegistryUpdated);
         }
     }
     else
@@ -200,17 +213,11 @@ void ARealGazeboManager::StartBridge()
         return;
     }
 
-    // Convert unified DataTable to Bridge-compatible format
-    UDataTable* BridgeCompatibleTable = CreateBridgeCompatibleDataTable();
-    if (!BridgeCompatibleTable)
-    {
-        UE_LOG(LogRealGazebo, Error, TEXT("Failed to create Bridge-compatible DataTable"));
-        BridgeStatus = TEXT("Error - DataTable Conversion Failed");
-        return;
-    }
+    // Vehicle config flows through UVehicleRegistrySubsystem (pushed in BeginPlay
+    // via SyncBridgeSubsystemFromRegistry). The legacy VehicleConfigTable slot is
+    // left untouched here - the bridge subsystem reads its pushed cache first,
+    // so we no longer need to materialize a converted DataTable per StartBridge call.
 
-    // Configure bridge subsystem with the DataTable
-    BridgeSubsystem->VehicleConfigTable = BridgeCompatibleTable;
     BridgeSubsystem->ListenPort = ListenPort;
     BridgeSubsystem->ServerIPAddress = ServerIPAddress;
     BridgeSubsystem->bAutoSpawnVehicles = bAutoSpawnVehicles;
@@ -317,18 +324,12 @@ void ARealGazeboManager::InitializeCameraUI()
         return;
     }
 
-    // Convert unified DataTable to UI-compatible format
-    UDataTable* UICompatibleTable = CreateUICompatibleDataTable();
-    if (!UICompatibleTable)
-    {
-        UE_LOG(LogRealGazebo, Error, TEXT("Failed to create UI-compatible DataTable"));
-        UIStatus = TEXT("Error - DataTable Conversion Failed");
-        return;
-    }
-
+    // Vehicle icons flow through UVehicleRegistrySubsystem -> UISubsystem image map
+    // (pushed in BeginPlay via SyncBridgeSubsystemFromRegistry). Widgets call
+    // UISubsystem->GetVehicleImage directly, so we no longer hand a DataTable here.
     UISubsystem->InitializeCameraUI(
         MainWidgetClass,
-        UICompatibleTable,
+        /*VehicleTypeImageDataTable=*/ nullptr,
         InitialCameraLocation,
         InitialCameraRotation,
         bAutoCreateViewerDirector,
@@ -560,55 +561,63 @@ void ARealGazeboManager::ConfigureBridgePoolSettings()
 }
 
 //----------------------------------------------------------
-// DataTable Conversion Helpers
+// Registry synchronization
 //----------------------------------------------------------
 
-UDataTable* ARealGazeboManager::CreateBridgeCompatibleDataTable()
+void ARealGazeboManager::SyncBridgeSubsystemFromRegistry()
 {
-    if (!UnifiedVehicleDataTable)
+    UVehicleRegistrySubsystem* Registry = nullptr;
+    if (UGameInstance* GameInstance = GetGameInstance())
     {
-        UE_LOG(LogRealGazebo, Warning, TEXT("Cannot create Bridge DataTable - UnifiedVehicleDataTable is null"));
-        return nullptr;
+        Registry = GameInstance->GetSubsystem<UVehicleRegistrySubsystem>();
+    }
+    if (!Registry)
+    {
+        return;
     }
 
-    RuntimeBridgeDataTable = NewObject<UDataTable>(this, UDataTable::StaticClass(), TEXT("RuntimeBridgeDataTable"));
-    RuntimeBridgeDataTable->RowStruct = FBridgeVehicleConfigRow::StaticStruct();
+    const TArray<uint8> TypeCodes = Registry->GetAllVehicleTypeCodes(/*bUIOnly=*/ false);
 
-    TArray<FName> RowNames = UnifiedVehicleDataTable->GetRowNames();
-    for (const FName& RowName : RowNames)
+    TMap<uint8, FBridgeVehicleConfigRow> BridgeConfigs;
+    TMap<uint8, TSoftObjectPtr<UTexture2D>> ImageMap;
+    BridgeConfigs.Reserve(TypeCodes.Num());
+    ImageMap.Reserve(TypeCodes.Num());
+
+    for (uint8 Code : TypeCodes)
     {
-        if (const FRealGazeboVehicleConfigRow* UnifiedRow = UnifiedVehicleDataTable->FindRow<FRealGazeboVehicleConfigRow>(RowName, TEXT("")))
+        FRealGazeboVehicleConfigRow Unified;
+        if (!Registry->GetVehicleData(Code, Unified))
         {
-            RuntimeBridgeDataTable->AddRow(RowName, UnifiedRow->ToBridgeConfigRow());
+            continue;
         }
+
+        FBridgeVehicleConfigRow BridgeRow = Unified.ToBridgeConfigRow();
+
+        // The Bridge row only carries the hard TSubclassOf. If the unified row used
+        // the soft pointer (the recommended path for mod content), resolve it now so
+        // the spawn pipeline (VehiclePoolManager::GetVehicleClass) finds a valid class.
+        if (!BridgeRow.VehiclePawnClass && !Unified.VehiclePawnClassSoft.IsNull())
+        {
+            BridgeRow.VehiclePawnClass = Unified.VehiclePawnClassSoft.LoadSynchronous();
+        }
+
+        BridgeConfigs.Add(Code, BridgeRow);
+        ImageMap.Add(Code, Unified.VehicleImage);
     }
 
-    UE_LOG(LogRealGazebo, Verbose, TEXT("Created Bridge DataTable with %d rows"), RowNames.Num());
-    return RuntimeBridgeDataTable;
+    if (BridgeSubsystem.IsValid())
+    {
+        BridgeSubsystem->PushVehicleConfigs(BridgeConfigs);
+    }
+    if (UISubsystem.IsValid())
+    {
+        UISubsystem->PushVehicleImageMap(ImageMap);
+    }
 }
 
-UDataTable* ARealGazeboManager::CreateUICompatibleDataTable()
+void ARealGazeboManager::HandleRegistryUpdated()
 {
-    if (!UnifiedVehicleDataTable)
-    {
-        UE_LOG(LogRealGazebo, Warning, TEXT("Cannot create UI DataTable - UnifiedVehicleDataTable is null"));
-        return nullptr;
-    }
-
-    RuntimeUIDataTable = NewObject<UDataTable>(this, UDataTable::StaticClass(), TEXT("RuntimeUIDataTable"));
-    RuntimeUIDataTable->RowStruct = FVehicleTypeImageRow::StaticStruct();
-
-    TArray<FName> RowNames = UnifiedVehicleDataTable->GetRowNames();
-    for (const FName& RowName : RowNames)
-    {
-        if (const FRealGazeboVehicleConfigRow* UnifiedRow = UnifiedVehicleDataTable->FindRow<FRealGazeboVehicleConfigRow>(RowName, TEXT("")))
-        {
-            RuntimeUIDataTable->AddRow(RowName, UnifiedRow->ToVehicleTypeImageRow());
-        }
-    }
-
-    UE_LOG(LogRealGazebo, Verbose, TEXT("Created UI DataTable with %d rows"), RowNames.Num());
-    return RuntimeUIDataTable;
+    SyncBridgeSubsystemFromRegistry();
 }
 
 //----------------------------------------------------------
