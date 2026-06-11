@@ -12,6 +12,7 @@
 #include "DataStreamProcessor.h"
 #include "VehiclePoolManager.h"
 #include "VehicleBasePawn.h"
+#include "SpawnCommandSender.h"
 #include "RealGazeboBridge.h"
 
 UGazeboBridgeSubsystem::UGazeboBridgeSubsystem()
@@ -77,6 +78,107 @@ void UGazeboBridgeSubsystem::Deinitialize()
 bool UGazeboBridgeSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
     return !IsRunningDedicatedServer();
+}
+
+//----------------------------------------------------------
+// Runtime Spawn Commands (UE -> simulation manager)
+//----------------------------------------------------------
+
+USpawnCommandSender* UGazeboBridgeSubsystem::EnsureSpawnSender()
+{
+    if (!SpawnSender)
+    {
+        SpawnSender = NewObject<USpawnCommandSender>(this);
+    }
+    return SpawnSender;
+}
+
+FString UGazeboBridgeSubsystem::ResolveGazeboHostIP() const
+{
+    return !GazeboHostIP.IsEmpty() ? GazeboHostIP : LearnedGazeboHostIP;
+}
+
+void UGazeboBridgeSubsystem::NotifyGazeboHost(const FString& SenderIP)
+{
+    if (!SenderIP.IsEmpty() && LearnedGazeboHostIP != SenderIP)
+    {
+        LearnedGazeboHostIP = SenderIP;
+        UE_LOG(LogRealGazeboBridge, Display,
+               TEXT("Spawn commands will target simulation host %s:%d"),
+               *SenderIP, SpawnCommandPort);
+    }
+}
+
+bool UGazeboBridgeSubsystem::SpawnVehicleAt(uint8 VehicleTypeCode, uint8 VehicleNum,
+                                            FVector WorldLocation, FRotator WorldRotation)
+{
+    const FString HostIP = ResolveGazeboHostIP();
+    if (HostIP.IsEmpty())
+    {
+        UE_LOG(LogRealGazeboBridge, Warning,
+               TEXT("SpawnVehicleAt: simulation host unknown - set GazeboHostIP "
+                    "or wait for the first incoming sim packet"));
+        return false;
+    }
+
+    USpawnCommandSender* Sender = EnsureSpawnSender();
+    if (!Sender->SetDestination(HostIP, SpawnCommandPort))
+    {
+        return false;
+    }
+
+    const bool bSent = Sender->SendSpawn(VehicleNum, VehicleTypeCode,
+                                         WorldLocation, WorldRotation.Quaternion());
+    if (bSent)
+    {
+        UE_LOG(LogRealGazeboBridge, Display,
+               TEXT("Spawn command sent: type=%d num=%d -> %s:%d"),
+               VehicleTypeCode, VehicleNum, *HostIP, SpawnCommandPort);
+    }
+    return bSent;
+}
+
+bool UGazeboBridgeSubsystem::DespawnVehicle(const FVehicleID& VehicleID)
+{
+    const FString HostIP = ResolveGazeboHostIP();
+    if (HostIP.IsEmpty())
+    {
+        UE_LOG(LogRealGazeboBridge, Warning,
+               TEXT("DespawnVehicle: simulation host unknown"));
+        return false;
+    }
+
+    USpawnCommandSender* Sender = EnsureSpawnSender();
+    if (!Sender->SetDestination(HostIP, SpawnCommandPort))
+    {
+        return false;
+    }
+
+    const bool bSent = Sender->SendDespawn(VehicleID.VehicleNum, VehicleID.VehicleType);
+    if (bSent)
+    {
+        UE_LOG(LogRealGazeboBridge, Display,
+               TEXT("Despawn command sent: %s -> %s:%d"),
+               *VehicleID.ToString(), *HostIP, SpawnCommandPort);
+    }
+    return bSent;
+}
+
+int32 UGazeboBridgeSubsystem::GetNextFreeVehicleNum() const
+{
+    TSet<uint8> UsedNums;
+    for (const TPair<FVehicleID, FVehicleRuntimeData>& Pair : VehicleDataMap)
+    {
+        UsedNums.Add(Pair.Key.VehicleNum);
+    }
+    for (int32 Num = 0; Num <= 255; ++Num)
+    {
+        if (!UsedNums.Contains(static_cast<uint8>(Num)))
+        {
+            return Num;
+        }
+    }
+    return -1;
 }
 
 void UGazeboBridgeSubsystem::StartBridge()

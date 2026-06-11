@@ -17,6 +17,7 @@
 // Forward declarations
 class UDataStreamProcessor;
 class UVehiclePoolManager;
+class USpawnCommandSender;
 class UWorld;
 class APlayerCameraManager;
 
@@ -55,8 +56,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bridge|Network")
     int32 ListenPort = 5005;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bridge|Network") 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bridge|Network")
     FString ServerIPAddress = TEXT("");
+
+    /** Manager UDP port for runtime spawn/despawn commands (UE -> sim) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bridge|Network")
+    int32 SpawnCommandPort = 5006;
+
+    /** Manager host for spawn commands. Leave empty to auto-learn it from
+     *  the source address of incoming simulation packets. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bridge|Network")
+    FString GazeboHostIP = TEXT("");
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bridge|Performance")
     bool bAutoSpawnVehicles = true;
@@ -82,6 +92,33 @@ public:
     /** Remove/despawn a specific vehicle by ID (used when receiving MessageID=4 destroy command) */
     UFUNCTION(BlueprintCallable, Category = "Bridge|Control")
     void RemoveVehicle(const FVehicleID& VehicleID);
+
+    //----------------------------------------------------------
+    // Runtime Spawn Commands (UE -> simulation manager, UDP :5006)
+    //----------------------------------------------------------
+
+    /** Ask the simulation manager to spawn a vehicle at a UE world transform.
+     *  Fire-and-forget: success shows up as the vehicle's pose stream (which
+     *  auto-spawns the visual pawn here); no stream after a few seconds
+     *  means the spawn failed sim-side (check the manager logs). */
+    UFUNCTION(BlueprintCallable, Category = "Bridge|Spawn")
+    bool SpawnVehicleAt(uint8 VehicleTypeCode, uint8 VehicleNum,
+                        FVector WorldLocation, FRotator WorldRotation);
+
+    /** Ask the manager to despawn a vehicle. The sim removes model/autopilot
+     *  and its destroy echo (MessageID=4) cleans up the pawn here — do not
+     *  remove the pawn locally. */
+    UFUNCTION(BlueprintCallable, Category = "Bridge|Spawn")
+    bool DespawnVehicle(const FVehicleID& VehicleID);
+
+    /** Smallest vehicle num not in use across ALL types (or -1 when full).
+     *  Nums must be globally unique: the sim keys ports/namespaces by num. */
+    UFUNCTION(BlueprintCallable, Category = "Bridge|Spawn")
+    int32 GetNextFreeVehicleNum() const;
+
+    /** Called by DataStreamProcessor with each packet's source address so
+     *  spawn commands can target the sim host without configuration. */
+    void NotifyGazeboHost(const FString& SenderIP);
 
     //----------------------------------------------------------
     // Vehicle Management
@@ -182,6 +219,16 @@ protected:
 
     UPROPERTY()
     TObjectPtr<UVehiclePoolManager> VehiclePool;
+
+    /** Outbound spawn/despawn command client (created on first use) */
+    UPROPERTY()
+    TObjectPtr<USpawnCommandSender> SpawnSender;
+
+    /** Sim host learned from incoming packets (used when GazeboHostIP empty) */
+    FString LearnedGazeboHostIP;
+
+    USpawnCommandSender* EnsureSpawnSender();
+    FString ResolveGazeboHostIP() const;
 
     //----------------------------------------------------------
     // Performance Optimization

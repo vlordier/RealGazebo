@@ -203,6 +203,13 @@ void UDataStreamProcessor::ProcessSinglePacket(const FUDPData& PacketData)
         return;
     }
 
+    // Remember where simulation traffic comes from so outbound spawn
+    // commands can target the same host without any configuration
+    if (UGazeboBridgeSubsystem* HostSubsystem = BridgeSubsystem.Get())
+    {
+        HostSubsystem->NotifyGazeboHost(PacketData.SenderIP);
+    }
+
     switch (MessageID)
     {
         case 1: // Pose data
