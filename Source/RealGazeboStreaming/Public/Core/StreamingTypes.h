@@ -60,7 +60,7 @@ enum class EEncoderPreset : uint8
 //----------------------------------------------------------
 
 UENUM(BlueprintType)
-enum class EH264Profile : uint8
+enum class ERealGazeboH264Profile : uint8
 {
 	Baseline         UMETA(DisplayName = "Baseline"),
 };
@@ -190,7 +190,7 @@ struct REALGAZEBOSTREAMING_API FStreamConfig
 	// - GOP Size: Auto-calculated as FPS/2 for 0.5s keyframe interval (see GetGOPSize())
 	//----------------------------------------------------------
 	EEncoderPreset Preset = EEncoderPreset::UltraLowLatency;
-	EH264Profile Profile = EH264Profile::Baseline;
+	ERealGazeboH264Profile Profile = ERealGazeboH264Profile::Baseline;
 	bool bZeroCopy = true;
 
 	/**

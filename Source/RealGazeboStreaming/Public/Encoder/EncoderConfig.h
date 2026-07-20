@@ -55,7 +55,7 @@ struct FEncoderConfig
 	EEncoderPreset Preset = EEncoderPreset::UltraLowLatency;
 
 	/** H.264 profile (always Baseline for maximum compatibility) */
-	EH264Profile Profile = EH264Profile::Baseline;
+	ERealGazeboH264Profile Profile = ERealGazeboH264Profile::Baseline;
 
 	/** Rate control mode (always CBR for consistent latency) */
 	bool bConstantBitrate = true;
