@@ -189,7 +189,9 @@ ARealGazeboViewerDirector* URealGazeboUISubsystem::CreateViewerDirector(const FV
     }
 
     FActorSpawnParameters SpawnParams;
-    SpawnParams.Name = FName(TEXT("RealGazeboViewerDirector_FromUISubsystem"));
+    // Note: No fixed Name set. A hard-coded name collides on PIE re-runs because a
+    // Destroy()'d director keeps its name until GC, causing a fatal "cannot generate
+    // unique name" error. Let the engine auto-assign a unique name instead.
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
     ViewerDirector = World->SpawnActor<ARealGazeboViewerDirector>(
