@@ -105,6 +105,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Bridge|Pool")
     bool IsActiveVehicle() const;
 
+    /** Force pool active state (for testing/manual spawning) */
+    UFUNCTION(BlueprintCallable, Category = "Bridge|Pool")
+    void SetActiveVehicle(bool bActive);
+
+    /** Manually initialize vehicle for placed actors / streaming test */
+    UFUNCTION(BlueprintCallable, Category = "Bridge|Pool")
+    void InitializeVehicleManually(int32 InVehicleNum, uint8 InVehicleType, const FString& InVehicleTypeName);
+
     //----------------------------------------------------------
     // Performance Settings
     //----------------------------------------------------------

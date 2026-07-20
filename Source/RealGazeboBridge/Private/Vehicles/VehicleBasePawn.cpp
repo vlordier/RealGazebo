@@ -216,6 +216,49 @@ bool AVehicleBasePawn::IsActiveVehicle() const
     return !bIsInPool;
 }
 
+void AVehicleBasePawn::SetActiveVehicle(bool bActive)
+{
+    bIsInPool = !bActive;
+
+    SetActorHiddenInGame(!bActive);
+    SetActorTickEnabled(bActive);
+
+    UE_LOG(LogRealGazeboBridge, Log,
+        TEXT("Vehicle %s Active=%s"),
+        *VehicleID.ToString(),
+        bActive ? TEXT("True") : TEXT("False"));
+}
+
+void AVehicleBasePawn::InitializeVehicleManually(int32 InVehicleNum, uint8 InVehicleType, const FString& InVehicleTypeName)
+{
+    VehicleID.VehicleType = InVehicleType;
+    VehicleID.VehicleNum = InVehicleNum;
+
+    VehicleType = InVehicleType;
+    VehicleTypeName = InVehicleTypeName;
+
+    bIsInPool = false;
+
+    SetActorHiddenInGame(false);
+    SetActorTickEnabled(true);
+
+    TargetPosition = GetActorLocation();
+    TargetRotation = GetActorRotation().Quaternion();
+    bHasMovementTarget = false;
+    bHasServoTargets = false;
+
+#if WITH_EDITOR
+    const FString SafeTypeName = VehicleTypeName.IsEmpty() ? TEXT("vehicle") : VehicleTypeName.ToLower();
+    SetActorLabel(FString::Printf(TEXT("%s_%d"), *SafeTypeName, InVehicleNum));
+#endif
+
+    UE_LOG(LogRealGazeboBridge, Display,
+        TEXT("InitializeVehicleManually: VehicleID=%s, VehicleType=%d, VehicleTypeName=%s, Active=True"),
+        *VehicleID.ToString(),
+        VehicleType,
+        *VehicleTypeName);
+}
+
 void AVehicleBasePawn::PerformSmoothMovement(float DeltaTime)
 {
     const FVector CurrentLocation = GetActorLocation();
