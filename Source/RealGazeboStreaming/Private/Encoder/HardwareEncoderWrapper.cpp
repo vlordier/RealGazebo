@@ -465,6 +465,41 @@ bool FHardwareEncoderWrapper::SetCUDATextureFromVulkan(FRHITexture* Texture,
 	const int32 TexWidth = Texture->GetSizeX();
 	const int32 TexHeight = Texture->GetSizeY();
 
+	// Validate the layout this path actually depends on, before touching CUDA.
+	// The import below hardcodes a single-mip, non-MSAA, 4-channel 8-bit 2D layout
+	// (arrayDesc.NumChannels=4, CU_AD_FORMAT_UNSIGNED_INT8, numLevels=1, Depth=0) and a row
+	// pitch of TexWidth*4. A mismatch would not fail loudly: cuMemcpy2D would copy the wrong
+	// number of bytes per row and emit a silently corrupted frame instead of an error.
+	// Note: FRHITextureDesc::IsTexture2D() also accepts Texture2DArray, which this path cannot
+	// handle, so the dimension is compared directly.
+	const FRHITextureDesc& TextureDesc = Texture->GetDesc();
+	if (TextureDesc.Dimension != ETextureDimension::Texture2D
+		|| TextureDesc.Format != PF_B8G8R8A8
+		|| TextureDesc.NumMips != 1
+		|| TextureDesc.NumSamples != 1)
+	{
+		OutErrorMessage = FString::Printf(
+			TEXT("Unsupported texture for CUDA interop: %dx%d dimension=%d format=%s mips=%d samples=%d arraysize=%d (expected Texture2D / %s / 1 mip / no MSAA)"),
+			TexWidth, TexHeight,
+			(int32)TextureDesc.Dimension,
+			GPixelFormats[TextureDesc.Format].Name,
+			(int32)TextureDesc.NumMips,
+			(int32)TextureDesc.NumSamples,
+			(int32)TextureDesc.ArraySize,
+			GPixelFormats[PF_B8G8R8A8].Name);
+
+		// EncodeFrame runs per frame and its caller already logs OutErrorMessage on every
+		// failure, so emit the detailed diagnostic only once to avoid flooding the log.
+		if (!bLoggedUnsupportedTexture)
+		{
+			bLoggedUnsupportedTexture = true;
+			UE_LOG(LogTemp, Error, TEXT("HardwareEncoderWrapper: %s"), *OutErrorMessage);
+			UE_LOG(LogTemp, Error, TEXT("HardwareEncoderWrapper:   The CUDA/Vulkan zero-copy path requires the exact layout produced by FramePool (Create2D + PF_B8G8R8A8 + 1 mip + no MSAA)."));
+			UE_LOG(LogTemp, Error, TEXT("HardwareEncoderWrapper:   Every frame using this texture will fail to encode. Repeat occurrences of this diagnostic are suppressed."));
+		}
+		return false;
+	}
+
 	FCUDAModule::CUDA().cuCtxPushCurrent(CudaContext);
 
 	// Check cache first - if we have both TiledArray and LinearArray, just copy and return
@@ -508,15 +543,7 @@ bool FHardwareEncoderWrapper::SetCUDATextureFromVulkan(FRHITexture* Texture,
 		return false;
 	}
 
-	FTexture2DRHIRef Texture2D = static_cast<FRHITexture2D*>(Texture);
-	if (!Texture2D.IsValid())
-	{
-		FCUDAModule::CUDA().cuCtxPopCurrent(nullptr);
-		OutErrorMessage = TEXT("Unsupported texture type (expected 2D)");
-		return false;
-	}
-
-	const FVulkanRHIAllocationInfo AllocationInfo = VulkanRHI->RHIGetAllocationInfo(Texture2D.GetReference());
+	const FVulkanRHIAllocationInfo AllocationInfo = VulkanRHI->RHIGetAllocationInfo(Texture);
 	VkDevice Device = VulkanRHI->RHIGetVkDevice();
 
 	PFN_vkGetMemoryFdKHR GetMemoryFdKHR = (PFN_vkGetMemoryFdKHR)VulkanRHI->RHIGetVkDeviceProcAddr("vkGetMemoryFdKHR");
@@ -645,8 +672,8 @@ bool FHardwareEncoderWrapper::SetCUDATextureFromVulkan(FRHITexture* Texture,
 		Cached.bValid = true;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("HardwareEncoderWrapper: Created CUDA linear staging array %dx%d (Total cached: %d)"),
-		TexWidth, TexHeight, CUDATextureCache.Num());
+	UE_LOG(LogTemp, Log, TEXT("HardwareEncoderWrapper: Created CUDA linear staging array %dx%d format=%s (Total cached: %d)"),
+		TexWidth, TexHeight, GPixelFormats[TextureDesc.Format].Name, CUDATextureCache.Num());
 
 	// Pass the LINEAR array to encoder (NOT the tiled one!)
 	InputFrame->SetTexture(LinearArray, AVEncoder::FVideoEncoderInputFrame::EUnderlyingRHI::Vulkan, nullptr,

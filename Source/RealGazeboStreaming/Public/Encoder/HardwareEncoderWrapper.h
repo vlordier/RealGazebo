@@ -271,6 +271,9 @@ private:
 	/** Mutex for CUDA cache access */
 	FCriticalSection CUDACacheMutex;
 
+	/** Suppress repeat logging of an unsupported input texture (validated every frame) */
+	bool bLoggedUnsupportedTexture = false;
+
 	/** Clear the CUDA texture cache (called on shutdown) */
 	void ClearCUDATextureCache();
 
