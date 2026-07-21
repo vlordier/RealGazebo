@@ -5,6 +5,7 @@
 #include "Sockets.h"
 #include "SocketSubsystem.h"
 #include "IPAddress.h"
+#include "Misc/DateTime.h"
 
 namespace
 {
@@ -64,16 +65,17 @@ namespace
 		if (Length < 0x80)
 		{
 			Out.Add(static_cast<uint8>(Length));
-			return;
 		}
-		if (Length <= 0xFF)
+		else if (Length <= 0xFF)
 		{
 			Out.Add(0x81);
 			Out.Add(static_cast<uint8>(Length));
-			return;
 		}
-		Out.Add(0x82);
-		AppendU16(Out, static_cast<uint16>(Length));
+		else
+		{
+			Out.Add(0x82);
+			AppendU16(Out, static_cast<uint16>(Length));
+		}
 	}
 
 	void AddLocalTag(TArray<uint8>& Out, uint8 Tag, const TArray<uint8>& Value)
@@ -81,6 +83,12 @@ namespace
 		Out.Add(Tag);
 		AppendBerLength(Out, Value.Num());
 		Out.Append(Value);
+	}
+
+	uint64 UnixEpochMicroseconds()
+	{
+		static const FDateTime UnixEpoch(1970, 1, 1);
+		return static_cast<uint64>((FDateTime::UtcNow() - UnixEpoch).GetTicks() / 10);
 	}
 }
 
@@ -163,38 +171,42 @@ void FSTANAG4609Sink::PushEncodedVideo(
 void FSTANAG4609Sink::EmitProgramTables()
 {
 	TArray<uint8> Pat;
-	Pat.Add(0x00); // table_id
+	Pat.Add(0x00);
 	Pat.Add(0xB0); Pat.Add(0x0D);
-	AppendU16(Pat, 1); // transport_stream_id
+	AppendU16(Pat, 1);
 	Pat.Add(0xC1); Pat.Add(0x00); Pat.Add(0x00);
 	AppendU16(Pat, ProgramNumber);
 	Pat.Add(static_cast<uint8>(0xE0 | ((PmtPid >> 8) & 0x1F)));
 	Pat.Add(static_cast<uint8>(PmtPid));
 	AppendU32(Pat, MpegCrc32(Pat.GetData(), Pat.Num()));
-	TArray<uint8> PatPayload; PatPayload.Add(0x00); PatPayload.Append(Pat);
+	TArray<uint8> PatPayload;
+	PatPayload.Add(0x00);
+	PatPayload.Append(Pat);
 	EmitTSPayload(0x0000, PatPayload, true);
 
 	TArray<uint8> Pmt;
 	Pmt.Add(0x02);
-	Pmt.Add(0xB0); Pmt.Add(0x1C); // section length 28 bytes after this field
+	Pmt.Add(0xB0); Pmt.Add(0x1D);
 	AppendU16(Pmt, ProgramNumber);
 	Pmt.Add(0xC1); Pmt.Add(0x00); Pmt.Add(0x00);
 	Pmt.Add(static_cast<uint8>(0xE0 | ((VideoPid >> 8) & 0x1F)));
 	Pmt.Add(static_cast<uint8>(VideoPid));
-	Pmt.Add(0xF0); Pmt.Add(0x00); // program_info_length
-	// H.264 elementary stream
+	Pmt.Add(0xF0); Pmt.Add(0x00);
 	Pmt.Add(0x1B);
 	Pmt.Add(static_cast<uint8>(0xE0 | ((VideoPid >> 8) & 0x1F)));
 	Pmt.Add(static_cast<uint8>(VideoPid));
 	Pmt.Add(0xF0); Pmt.Add(0x00);
-	// KLV private data with KLVA registration descriptor
 	Pmt.Add(0x06);
 	Pmt.Add(static_cast<uint8>(0xE0 | ((KlvPid >> 8) & 0x1F)));
 	Pmt.Add(static_cast<uint8>(KlvPid));
 	Pmt.Add(0xF0); Pmt.Add(0x06);
-	Pmt.Add(0x05); Pmt.Add(0x04); Pmt.Add('K'); Pmt.Add('L'); Pmt.Add('V'); Pmt.Add('A');
+	Pmt.Add(0x05); Pmt.Add(0x04);
+	Pmt.Add(static_cast<uint8>('K')); Pmt.Add(static_cast<uint8>('L'));
+	Pmt.Add(static_cast<uint8>('V')); Pmt.Add(static_cast<uint8>('A'));
 	AppendU32(Pmt, MpegCrc32(Pmt.GetData(), Pmt.Num()));
-	TArray<uint8> PmtPayload; PmtPayload.Add(0x00); PmtPayload.Append(Pmt);
+	TArray<uint8> PmtPayload;
+	PmtPayload.Add(0x00);
+	PmtPayload.Append(Pmt);
 	EmitTSPayload(PmtPid, PmtPayload, true);
 }
 
@@ -224,13 +236,13 @@ void FSTANAG4609Sink::EmitPES(
 	uint16 PID, uint8 StreamId, const TArray<uint8>& Payload, uint64 Pts90k, bool bDataAlignment)
 {
 	TArray<uint8> Pes;
-	Pes.Append({0x00, 0x00, 0x01, StreamId});
+	Pes.Add(0x00); Pes.Add(0x00); Pes.Add(0x01); Pes.Add(StreamId);
 	const int32 PesPayloadLength = 3 + 5 + Payload.Num();
 	const uint16 DeclaredLength = StreamId == 0xE0 || PesPayloadLength > 0xFFFF
 		? 0 : static_cast<uint16>(PesPayloadLength);
 	AppendU16(Pes, DeclaredLength);
 	Pes.Add(static_cast<uint8>(0x80 | (bDataAlignment ? 0x04 : 0x00)));
-	Pes.Add(0x80); // PTS only
+	Pes.Add(0x80);
 	Pes.Add(0x05);
 	AppendPts(Pes, Pts90k);
 	Pes.Append(Payload);
@@ -248,7 +260,6 @@ void FSTANAG4609Sink::EmitTSPayload(uint16 PID, const TArray<uint8>& Payload, bo
 		Packet[0] = 0x47;
 		Packet[1] = static_cast<uint8>(((bFirst && bPayloadUnitStart) ? 0x40 : 0x00) | ((PID >> 8) & 0x1F));
 		Packet[2] = static_cast<uint8>(PID);
-
 		const int32 Remaining = Payload.Num() - Offset;
 		const int32 CopyBytes = FMath::Min(Remaining, 184);
 		const bool bNeedsStuffing = CopyBytes < 184;
@@ -289,20 +300,19 @@ void FSTANAG4609Sink::SendPacket(const uint8* Packet188)
 TArray<uint8> FSTANAG4609Sink::BuildMISBLocalSet(const FEncodedVideoMetadata& Metadata) const
 {
 	TArray<uint8> Local;
-	// MISB ST 0601 core subset: precision timestamp, platform attitude and FOV.
 	{
-		TArray<uint8> V; AppendU64(V, Metadata.TimestampUs); AddLocalTag(Local, 2, V);
+		TArray<uint8> V;
+		AppendU64(V, UnixEpochMicroseconds());
+		AddLocalTag(Local, 2, V);
 	}
 	if (Metadata.bHasPlatformAttitude)
 	{
 		const double Heading = FMath::Fmod(Metadata.PlatformHeadingDeg + 360.0, 360.0);
 		const uint16 HeadingRaw = static_cast<uint16>(FMath::RoundToInt(Heading * 65535.0 / 360.0));
 		TArray<uint8> H; AppendU16(H, HeadingRaw); AddLocalTag(Local, 5, H);
-
 		const int16 PitchRaw = static_cast<int16>(FMath::Clamp(
 			FMath::RoundToInt(Metadata.PlatformPitchDeg * 32767.0 / 20.0), -32767, 32767));
 		TArray<uint8> P; AppendU16(P, static_cast<uint16>(PitchRaw)); AddLocalTag(Local, 6, P);
-
 		const int16 RollRaw = static_cast<int16>(FMath::Clamp(
 			FMath::RoundToInt(Metadata.PlatformRollDeg * 32767.0 / 50.0), -32767, 32767));
 		TArray<uint8> R; AppendU16(R, static_cast<uint16>(RollRaw)); AddLocalTag(Local, 7, R);
@@ -316,7 +326,6 @@ TArray<uint8> FSTANAG4609Sink::BuildMISBLocalSet(const FEncodedVideoMetadata& Me
 			FMath::RoundToInt(Metadata.VerticalFovDeg * 65535.0 / 180.0), 0, 65535));
 		TArray<uint8> V; AppendU16(V, VRaw); AddLocalTag(Local, 17, V);
 	}
-
 	static const uint8 UasLocalSetKey[16] = {
 		0x06,0x0E,0x2B,0x34,0x02,0x0B,0x01,0x01,
 		0x0E,0x01,0x03,0x01,0x01,0x00,0x00,0x00
