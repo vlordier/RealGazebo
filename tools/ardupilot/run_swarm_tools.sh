@@ -2,12 +2,11 @@
 set -euo pipefail
 
 # Connect an already-running ArduPilot SITL/Gazebo swarm to RealGazebo and
-# optionally drive the vehicles with the demo Lissajous/boids controller.
+# optionally drive it with the Lissajous/boids controller.
 #
-# ArduPilot multi-instance TCP ports conventionally advance by 10:
-#   instance 0 -> tcp:127.0.0.1:5760
-#   instance 1 -> tcp:127.0.0.1:5770
-#   ...
+# One MAVLink client per SITL instance is used. In controller mode the controller
+# also forwards vehicle state to RealGazebo; bridge-only mode runs the dedicated
+# state bridge instead.
 
 COUNT="${COUNT:-4}"
 BASE_TCP_PORT="${BASE_TCP_PORT:-5760}"
@@ -30,26 +29,29 @@ for ((i=0; i<COUNT; ++i)); do
 done
 
 cleanup() {
-  [[ -n "${BRIDGE_PID:-}" ]] && kill "$BRIDGE_PID" 2>/dev/null || true
-  [[ -n "${CTRL_PID:-}" ]] && kill "$CTRL_PID" 2>/dev/null || true
+  [[ -n "${CHILD_PID:-}" ]] && kill "$CHILD_PID" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
-
-"$PYTHON" "$ROOT/ardupilot_to_realgazebo.py" \
-  "${bridge_args[@]}" \
-  --realgazebo-host "$REALGAZEBO_HOST" \
-  --realgazebo-port "$REALGAZEBO_PORT" &
-BRIDGE_PID=$!
-
-echo "MAVLink -> RealGazebo bridge PID=$BRIDGE_PID"
 
 if [[ "$RUN_CONTROLLER" == "1" ]]; then
   extra=()
   [[ "$GUIDED" == "1" ]] && extra+=(--guided)
   [[ "$ARM" == "1" ]] && extra+=(--arm)
-  "$PYTHON" "$ROOT/lissajous_boids.py" "${controller_args[@]}" "${extra[@]}" &
-  CTRL_PID=$!
-  echo "Lissajous/boids controller PID=$CTRL_PID"
+  "$PYTHON" "$ROOT/lissajous_boids.py" \
+    "${controller_args[@]}" \
+    --vehicle-type "$VEHICLE_TYPE" \
+    --realgazebo-host "$REALGAZEBO_HOST" \
+    --realgazebo-port "$REALGAZEBO_PORT" \
+    "${extra[@]}" &
+  CHILD_PID=$!
+  echo "Unified swarm controller + RealGazebo bridge PID=$CHILD_PID"
+else
+  "$PYTHON" "$ROOT/ardupilot_to_realgazebo.py" \
+    "${bridge_args[@]}" \
+    --realgazebo-host "$REALGAZEBO_HOST" \
+    --realgazebo-port "$REALGAZEBO_PORT" &
+  CHILD_PID=$!
+  echo "MAVLink -> RealGazebo bridge PID=$CHILD_PID"
 fi
 
-wait
+wait "$CHILD_PID"
