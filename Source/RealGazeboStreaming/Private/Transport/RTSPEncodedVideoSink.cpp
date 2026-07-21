@@ -20,20 +20,16 @@ void FRTSPEncodedVideoSink::Stop()
 	bStarted.store(false);
 }
 
-bool FRTSPEncodedVideoSink::PushEncodedVideo(
+void FRTSPEncodedVideoSink::PushEncodedVideo(
 	const TArray<FEncodedNALUnit>& NALUnits,
-	const FEncodedVideoMetadata& Metadata,
-	FString& OutError)
+	const FEncodedVideoMetadata& Metadata)
 {
 	(void)Metadata;
 	if (!bStarted.load() || !Source || Source->IsShuttingDown())
 	{
-		OutError = TEXT("RTSP sink is not available");
-		return false;
+		return;
 	}
-
 	Source->PushNALUnits(NALUnits);
-	return true;
 }
 
 bool FRTSPEncodedVideoSink::WantsFrames() const
