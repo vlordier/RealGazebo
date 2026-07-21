@@ -7,12 +7,6 @@
 
 class FH264StreamSource;
 
-/**
- * Adapter exposing the existing per-stream Live555 H.264 source through the
- * transport-neutral encoded-video sink contract.
- *
- * Ownership stays with FStreamingPipeline; this adapter never owns the source.
- */
 class FRTSPEncodedVideoSink final : public IEncodedVideoSink
 {
 public:
@@ -23,10 +17,9 @@ public:
 
 	virtual bool Start(FString& OutError) override;
 	virtual void Stop() override;
-	virtual bool PushEncodedVideo(
+	virtual void PushEncodedVideo(
 		const TArray<FEncodedNALUnit>& NALUnits,
-		const FEncodedVideoMetadata& Metadata,
-		FString& OutError) override;
+		const FEncodedVideoMetadata& Metadata) override;
 	virtual bool WantsFrames() const override;
 	virtual FString GetName() const override { return TEXT("RTSP"); }
 
