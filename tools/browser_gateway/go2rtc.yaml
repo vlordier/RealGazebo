@@ -1,0 +1,14 @@
+streams:
+  realgazebo_fpv:
+    - rtsp://127.0.0.1:8554/x500_1/fpv
+
+api:
+  listen: ":1984"
+
+webrtc:
+  listen: ":8555/tcp"
+  candidates:
+    - 127.0.0.1:8555
+
+log:
+  level: info
