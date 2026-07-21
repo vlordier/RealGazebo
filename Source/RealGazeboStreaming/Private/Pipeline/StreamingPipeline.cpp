@@ -4,10 +4,13 @@
 #include "Pipeline/StreamingPipeline.h"
 #include "RTSP/RTSPServer.h"
 #include "Transport/RTSPEncodedVideoSink.h"
+#include "Transport/STANAG4609Sink.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "GameFramework/Actor.h"
 #include "HAL/PlatformTime.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 FStreamingPipeline::FStreamingPipeline(
 	const FStreamIdentifier& InStreamID,
@@ -16,6 +19,26 @@ FStreamingPipeline::FStreamingPipeline(
 	: StreamID(InStreamID), SceneCapture(InSceneCapture), RTSPServer(InRTSPServer)
 {
 	EncodedVideoFanout = MakeUnique<FEncodedVideoFanout>();
+
+	// One STANAG transport stream per vehicle. The configured port is the base
+	// port and VehicleNum provides a deterministic offset (5000 -> vehicle 0,
+	// 5001 -> vehicle 1, ...). This prevents multiple camera pipelines from
+	// interleaving independent MPEG-TS continuity counters on one UDP endpoint.
+	FString StanagHost;
+	int32 StanagBasePort = 0;
+	const TCHAR* Cmd = FCommandLine::Get();
+	if (FParse::Value(Cmd, TEXT("RealGazeboStanagHost="), StanagHost) &&
+		FParse::Value(Cmd, TEXT("RealGazeboStanagPort="), StanagBasePort) &&
+		!StanagHost.IsEmpty())
+	{
+		const int32 StreamPort = StanagBasePort + static_cast<int32>(StreamID.VehicleID.VehicleNum);
+		if (StreamPort > 0 && StreamPort <= 65535)
+		{
+			EncodedVideoFanout->AddSink(MakeShared<FSTANAG4609Sink>(StanagHost, StreamPort));
+			UE_LOG(LogTemp, Log, TEXT("StreamingPipeline: STANAG %s -> udp://%s:%d"),
+				*StreamID.ToString(), *StanagHost, StreamPort);
+		}
+	}
 }
 
 FStreamingPipeline::~FStreamingPipeline() { Shutdown(); }
@@ -250,10 +273,14 @@ FEncodedVideoMetadata FStreamingPipeline::BuildMetadata(const TArray<FEncodedNAL
 	const double HalfH = FMath::DegreesToRadians(M.HorizontalFovDeg * 0.5);
 	M.VerticalFovDeg = FMath::RadiansToDegrees(2.0 * FMath::Atan(FMath::Tan(HalfH) / Aspect));
 	M.bHasFieldOfView = true;
+
+	// MISB tags 13-15 describe sensor position, so use the camera component's
+	// world location rather than the vehicle actor origin.
+	M.LocalPositionCm = Capture->GetComponentLocation();
+	M.bHasLocalPosition = true;
+
 	if (const AActor* Owner = Capture->GetOwner())
 	{
-		M.LocalPositionCm = Owner->GetActorLocation();
-		M.bHasLocalPosition = true;
 		const FRotator R = Owner->GetActorRotation();
 		M.PlatformRollDeg = R.Roll;
 		M.PlatformPitchDeg = R.Pitch;
