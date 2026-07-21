@@ -20,14 +20,16 @@ FStreamingPipeline::FStreamingPipeline(
 {
 	EncodedVideoFanout = MakeUnique<FEncodedVideoFanout>();
 
-	// One STANAG transport stream per vehicle. The configured port is the base
-	// port and VehicleNum provides a deterministic offset (5000 -> vehicle 0,
-	// 5001 -> vehicle 1, ...). This prevents multiple camera pipelines from
-	// interleaving independent MPEG-TS continuity counters on one UDP endpoint.
+	// Automatic STANAG output is intentionally bound to one camera per vehicle
+	// (default camera id: "fpv"). This avoids interleaving independent MPEG-TS
+	// streams when a vehicle also exposes front/bottom/debug cameras.
 	FString StanagHost;
+	FString StanagCamera = TEXT("fpv");
 	int32 StanagBasePort = 0;
 	const TCHAR* Cmd = FCommandLine::Get();
-	if (FParse::Value(Cmd, TEXT("RealGazeboStanagHost="), StanagHost) &&
+	FParse::Value(Cmd, TEXT("RealGazeboStanagCamera="), StanagCamera);
+	if (StreamID.CameraID.Equals(StanagCamera, ESearchCase::IgnoreCase) &&
+		FParse::Value(Cmd, TEXT("RealGazeboStanagHost="), StanagHost) &&
 		FParse::Value(Cmd, TEXT("RealGazeboStanagPort="), StanagBasePort) &&
 		!StanagHost.IsEmpty())
 	{
@@ -274,8 +276,6 @@ FEncodedVideoMetadata FStreamingPipeline::BuildMetadata(const TArray<FEncodedNAL
 	M.VerticalFovDeg = FMath::RadiansToDegrees(2.0 * FMath::Atan(FMath::Tan(HalfH) / Aspect));
 	M.bHasFieldOfView = true;
 
-	// MISB tags 13-15 describe sensor position, so use the camera component's
-	// world location rather than the vehicle actor origin.
 	M.LocalPositionCm = Capture->GetComponentLocation();
 	M.bHasLocalPosition = true;
 
