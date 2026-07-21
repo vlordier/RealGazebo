@@ -74,11 +74,16 @@ private:
 	bool CreateHardwareEncoder(FString& OutErrorMessage);
 	void RegisterEncoderCallbacks();
 
+	// Declared on all non-Mac platforms because upstream Shutdown() calls it
+	// unconditionally; the implementation is a no-op outside Linux.
+#if !PLATFORM_MAC
+	void ClearCUDATextureCache();
+#endif
+
 #if PLATFORM_LINUX
 	bool SetCUDATextureFromVulkan(FRHITexture* Texture,
 		TSharedPtr<AVEncoder::FVideoEncoderInputFrame> InputFrame,
 		FString& OutErrorMessage);
-	void ClearCUDATextureCache();
 #endif
 
 #if !PLATFORM_MAC
