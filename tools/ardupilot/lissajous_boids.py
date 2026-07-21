@@ -1,27 +1,21 @@
 #!/usr/bin/env python3
-"""Drive an ArduPilot SITL swarm on smooth Lissajous paths with separation.
+"""Drive an ArduPilot SITL swarm and optionally mirror state into RealGazebo.
 
-This is intentionally a deterministic demo behavior, not the final C-UAS swarm
-controller. ArduPilot remains responsible for vehicle control/dynamics; this
-script only emits GUIDED local-NED setpoints.
-
-Default behavior:
-- phase-shifted 3D Lissajous references
-- low-pass target motion
-- boids-style short-range separation to prevent collisions
-- optional weak cohesion around the fleet centroid
-- yaw aligned with path velocity
-
-No vehicle is armed or mode-switched unless explicitly requested.
+One MAVLink connection is opened per vehicle and reused for both control and
+state forwarding. This avoids assuming that a SITL TCP endpoint accepts two
+independent clients.
 """
 from __future__ import annotations
 
 import argparse
 import math
+import socket
 import sys
 import time
 from dataclasses import dataclass, field
 from typing import Iterable
+
+from realgazebo_udp import Pose, encode_pose
 
 try:
     from pymavlink import mavutil
@@ -34,14 +28,31 @@ class Agent:
     index: int
     endpoint: str
     master: object
+    vehicle_type: int = 0
     north: float = 0.0
     east: float = 0.0
     down: float = -10.0
     vn: float = 0.0
     ve: float = 0.0
     vd: float = 0.0
-    have_state: bool = False
+    roll: float = 0.0
+    pitch: float = 0.0
+    yaw: float = 0.0
+    have_position: bool = False
+    have_attitude: bool = False
     target: list[float] = field(default_factory=lambda: [0.0, 0.0, -10.0])
+
+    def realgazebo_pose(self) -> Pose:
+        return Pose(
+            self.index,
+            self.vehicle_type,
+            self.north,
+            self.east,
+            self.down,
+            self.roll,
+            self.pitch,
+            self.yaw,
+        )
 
 
 def parse_endpoint(spec: str) -> tuple[int, str]:
@@ -80,21 +91,22 @@ def arm(master: object) -> None:
     )
 
 
-def request_local_position(master: object, hz: float) -> None:
+def request_state(master: object, hz: float) -> None:
     interval_us = int(1_000_000 / max(hz, 1.0))
-    master.mav.command_long_send(
-        master.target_system,
-        master.target_component,
-        mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
-        0,
-        32,  # LOCAL_POSITION_NED
-        interval_us,
-        0,
-        0,
-        0,
-        0,
-        0,
-    )
+    for message_id in (30, 32):  # ATTITUDE, LOCAL_POSITION_NED
+        master.mav.command_long_send(
+            master.target_system,
+            master.target_component,
+            mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
+            0,
+            message_id,
+            interval_us,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
 
 
 def lissajous_reference(
@@ -106,7 +118,6 @@ def lissajous_reference(
     vertical_amp: float,
     omega: float,
 ) -> tuple[float, float, float, float, float]:
-    """Return north,east,down and horizontal reference derivative."""
     a, b, c = 1.0, 2.0, 3.0
     n = radius_n * math.sin(a * omega * t + phase)
     e = radius_e * math.sin(b * omega * t + 0.7 * phase + math.pi / 2.0)
@@ -124,14 +135,13 @@ def separation_correction(
 ) -> tuple[float, float, float]:
     cn = ce = cd = 0.0
     for other in agents:
-        if other is agent or not other.have_state:
+        if other is agent or not other.have_position:
             continue
         dn = agent.north - other.north
         de = agent.east - other.east
         dd = agent.down - other.down
         dist2 = dn * dn + de * de + dd * dd
         if dist2 < 1e-6:
-            # deterministic symmetry breaker
             angle = (agent.index + 1) * 2.399963229728653
             cn += math.cos(angle) * gain
             ce += math.sin(angle) * gain
@@ -139,7 +149,6 @@ def separation_correction(
         dist = math.sqrt(dist2)
         if dist >= min_distance:
             continue
-        # Smooth repulsion that goes to zero at min_distance.
         strength = gain * (1.0 / dist - 1.0 / min_distance) / dist2
         cn += dn * strength
         ce += de * strength
@@ -148,21 +157,16 @@ def separation_correction(
 
 
 def cohesion_correction(agent: Agent, agents: list[Agent], gain: float) -> tuple[float, float, float]:
-    active = [a for a in agents if a.have_state]
+    active = [a for a in agents if a.have_position]
     if len(active) < 2 or gain <= 0.0:
         return 0.0, 0.0, 0.0
     cn = sum(a.north for a in active) / len(active)
     ce = sum(a.east for a in active) / len(active)
     cd = sum(a.down for a in active) / len(active)
-    return (
-        gain * (cn - agent.north),
-        gain * (ce - agent.east),
-        gain * (cd - agent.down),
-    )
+    return gain * (cn - agent.north), gain * (ce - agent.east), gain * (cd - agent.down)
 
 
 def send_position_target(agent: Agent, north: float, east: float, down: float, yaw: float) -> None:
-    # Use position + yaw, ignore velocity/acceleration/yaw-rate.
     type_mask = (
         mavutil.mavlink.POSITION_TARGET_TYPEMASK_VX_IGNORE
         | mavutil.mavlink.POSITION_TARGET_TYPEMASK_VY_IGNORE
@@ -194,24 +198,33 @@ def send_position_target(agent: Agent, north: float, east: float, down: float, y
 
 def update_state(agent: Agent) -> None:
     while True:
-        msg = agent.master.recv_match(type="LOCAL_POSITION_NED", blocking=False)
+        msg = agent.master.recv_match(blocking=False)
         if msg is None:
             return
-        agent.north = float(msg.x)
-        agent.east = float(msg.y)
-        agent.down = float(msg.z)
-        agent.vn = float(msg.vx)
-        agent.ve = float(msg.vy)
-        agent.vd = float(msg.vz)
-        if not agent.have_state:
-            agent.target[:] = [agent.north, agent.east, agent.down]
-        agent.have_state = True
+        kind = msg.get_type()
+        if kind == "LOCAL_POSITION_NED":
+            agent.north = float(msg.x)
+            agent.east = float(msg.y)
+            agent.down = float(msg.z)
+            agent.vn = float(msg.vx)
+            agent.ve = float(msg.vy)
+            agent.vd = float(msg.vz)
+            if not agent.have_position:
+                agent.target[:] = [agent.north, agent.east, agent.down]
+            agent.have_position = True
+        elif kind == "ATTITUDE":
+            agent.roll = float(msg.roll)
+            agent.pitch = float(msg.pitch)
+            agent.yaw = float(msg.yaw)
+            agent.have_attitude = True
 
 
 def main(argv: Iterable[str] | None = None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--vehicle", action="append", required=True, metavar="INDEX=MAVLINK_ENDPOINT")
+    p.add_argument("--vehicle-type", type=int, default=0)
     p.add_argument("--rate", type=float, default=20.0)
+    p.add_argument("--state-rate", type=float, default=60.0)
     p.add_argument("--radius-north", type=float, default=35.0)
     p.add_argument("--radius-east", type=float, default=35.0)
     p.add_argument("--altitude", type=float, default=20.0)
@@ -222,23 +235,29 @@ def main(argv: Iterable[str] | None = None) -> int:
     p.add_argument("--cohesion-gain", type=float, default=0.01)
     p.add_argument("--max-correction", type=float, default=12.0)
     p.add_argument("--smoothing", type=float, default=0.18)
-    p.add_argument("--guided", action="store_true", help="switch SITL vehicles to GUIDED")
-    p.add_argument("--arm", action="store_true", help="arm SITL vehicles (explicit opt-in)")
+    p.add_argument("--guided", action="store_true")
+    p.add_argument("--arm", action="store_true")
+    p.add_argument("--realgazebo-host")
+    p.add_argument("--realgazebo-port", type=int, default=5005)
     args = p.parse_args(list(argv) if argv is not None else None)
 
-    parsed = [parse_endpoint(v) for v in args.vehicle]
-    parsed.sort(key=lambda item: item[0])
+    parsed = sorted((parse_endpoint(v) for v in args.vehicle), key=lambda item: item[0])
     agents: list[Agent] = []
     for idx, endpoint in parsed:
         master = mavutil.mavlink_connection(endpoint, autoreconnect=True)
         print(f"waiting heartbeat agent {idx}: {endpoint}", file=sys.stderr)
-        master.wait_heartbeat(timeout=30)
-        request_local_position(master, max(args.rate, 10.0))
+        heartbeat = master.wait_heartbeat(timeout=30)
+        if heartbeat is None:
+            raise RuntimeError(f"no heartbeat from {endpoint}")
+        request_state(master, max(args.state_rate, 10.0))
         if args.guided:
             set_guided(master)
         if args.arm:
             arm(master)
-        agents.append(Agent(idx, endpoint, master))
+        agents.append(Agent(idx, endpoint, master, vehicle_type=args.vehicle_type))
+
+    rg_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if args.realgazebo_host else None
+    rg_destination = (args.realgazebo_host, args.realgazebo_port) if args.realgazebo_host else None
 
     omega = 2.0 * math.pi / max(args.period, 1.0)
     dt = 1.0 / max(args.rate, 1.0)
@@ -249,12 +268,14 @@ def main(argv: Iterable[str] | None = None) -> int:
         now = time.monotonic()
         for agent in agents:
             update_state(agent)
+            if rg_socket and rg_destination and agent.have_position and agent.have_attitude:
+                rg_socket.sendto(encode_pose(agent.realgazebo_pose()), rg_destination)
 
         if now >= next_tick:
             t = now - start
             count = max(len(agents), 1)
             for order, agent in enumerate(agents):
-                if not agent.have_state:
+                if not agent.have_position:
                     continue
                 phase = 2.0 * math.pi * order / count
                 rn, re, rd, vn_ref, ve_ref = lissajous_reference(
@@ -266,9 +287,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     args.vertical_amplitude,
                     omega,
                 )
-                sn, se, sd = separation_correction(
-                    agent, agents, args.min_separation, args.separation_gain
-                )
+                sn, se, sd = separation_correction(agent, agents, args.min_separation, args.separation_gain)
                 cn, ce, cd = cohesion_correction(agent, agents, args.cohesion_gain)
                 correction_norm = math.sqrt((sn + cn) ** 2 + (se + ce) ** 2 + (sd + cd) ** 2)
                 scale = min(1.0, args.max_correction / max(correction_norm, 1e-9))
