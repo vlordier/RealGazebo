@@ -8,11 +8,6 @@
 class FSocket;
 class FInternetAddr;
 
-/**
- * Native MPEG-TS UDP sink for STANAG 4609-style motion imagery transport.
- * Video is never re-encoded: H.264 NAL units from the hardware encoder are
- * packetized into MPEG-TS alongside a MISB KLV metadata PID.
- */
 class REALGAZEBOSTREAMING_API FSTANAG4609Sink final : public FContinuousEncodedVideoSink
 {
 public:
@@ -34,6 +29,7 @@ private:
 	void EmitTSPayload(uint16 PID, const TArray<uint8>& Payload, bool bPayloadUnitStart);
 	void SendPacket(const uint8* Packet188);
 	TArray<uint8> BuildMISBLocalSet(const FEncodedVideoMetadata& Metadata) const;
+	bool ResolveWGS84(const FEncodedVideoMetadata& Metadata, double& OutLat, double& OutLon, double& OutAltMsl) const;
 
 	FString Host;
 	int32 Port = 0;
@@ -41,4 +37,9 @@ private:
 	TSharedPtr<FInternetAddr> Destination;
 	uint8 Continuity[8192]{};
 	uint64 PacketCounter = 0;
+
+	bool bHasGeoOrigin = false;
+	double OriginLatitudeDeg = 0.0;
+	double OriginLongitudeDeg = 0.0;
+	double OriginAltitudeMslMeters = 0.0;
 };
