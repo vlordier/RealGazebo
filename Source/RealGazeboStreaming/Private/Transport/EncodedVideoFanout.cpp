@@ -83,16 +83,9 @@ void FEncodedVideoFanout::Push(const TArray<FEncodedNALUnit>& NALUnits, const FE
 
 	for (const TSharedRef<IEncodedVideoSink>& Sink : Snapshot)
 	{
-		if (!Sink->WantsFrames())
+		if (Sink->WantsFrames())
 		{
-			continue;
-		}
-
-		FString SinkError;
-		if (!Sink->PushEncodedVideo(NALUnits, Metadata, SinkError))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("EncodedVideoFanout: sink '%s' rejected frame %llu: %s"),
-				*Sink->GetName(), Metadata.FrameNumber, *SinkError);
+			Sink->PushEncodedVideo(NALUnits, Metadata);
 		}
 	}
 }
