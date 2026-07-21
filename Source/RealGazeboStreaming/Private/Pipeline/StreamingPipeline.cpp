@@ -13,31 +13,19 @@ FStreamingPipeline::FStreamingPipeline(
 	const FStreamIdentifier& InStreamID,
 	USceneCaptureComponent2D* InSceneCapture,
 	TSharedPtr<FRTSPServerWrapper> InRTSPServer)
-	: StreamID(InStreamID)
-	, SceneCapture(InSceneCapture)
-	, RTSPServer(InRTSPServer)
+	: StreamID(InStreamID), SceneCapture(InSceneCapture), RTSPServer(InRTSPServer)
 {
 	EncodedVideoFanout = MakeUnique<FEncodedVideoFanout>();
-	UE_LOG(LogTemp, Log, TEXT("StreamingPipeline: Created for stream %s"), *StreamID.ToString());
 }
 
-FStreamingPipeline::~FStreamingPipeline()
-{
-	Shutdown();
-}
+FStreamingPipeline::~FStreamingPipeline() { Shutdown(); }
 
 bool FStreamingPipeline::Initialize(const FStreamConfig& InConfig, FString& OutErrorMessage)
 {
-	if (bInitialized)
-	{
-		return true;
-	}
+	if (bInitialized) return true;
 	Config = InConfig;
 	EncoderConfig = FEncoderConfig(Config);
-	if (!EncoderConfig.Validate(OutErrorMessage))
-	{
-		return false;
-	}
+	if (!EncoderConfig.Validate(OutErrorMessage)) return false;
 	if (!InitializeComponents(OutErrorMessage))
 	{
 		CleanupComponents();
@@ -49,19 +37,10 @@ bool FStreamingPipeline::Initialize(const FStreamConfig& InConfig, FString& OutE
 
 void FStreamingPipeline::Shutdown()
 {
-	if (!bInitialized)
-	{
-		return;
-	}
+	if (!bInitialized) return;
 	bShuttingDown.store(true);
-	if (HardwareEncoder)
-	{
-		HardwareEncoder->PrepareForShutdown();
-	}
-	if (EncodingThread)
-	{
-		EncodingThread->ClearNALEncodedCallback();
-	}
+	if (HardwareEncoder) HardwareEncoder->PrepareForShutdown();
+	if (EncodingThread) EncodingThread->ClearNALEncodedCallback();
 	Stop();
 	CleanupComponents();
 	bInitialized = false;
@@ -90,45 +69,44 @@ bool FStreamingPipeline::InitializeComponents(FString& OutErrorMessage)
 		return false;
 	}
 
-	USceneCaptureComponent2D* SceneCapturePtr = SceneCapture.Get();
-	if (!SceneCapturePtr->TextureTarget)
+	USceneCaptureComponent2D* Capture = SceneCapture.Get();
+	if (!Capture->TextureTarget)
 	{
-		UTextureRenderTarget2D* NewRenderTarget = NewObject<UTextureRenderTarget2D>(
-			SceneCapturePtr->GetOwner(),
-			MakeUniqueObjectName(SceneCapturePtr->GetOwner(), UTextureRenderTarget2D::StaticClass(),
+		UTextureRenderTarget2D* RT = NewObject<UTextureRenderTarget2D>(
+			Capture->GetOwner(),
+			MakeUniqueObjectName(Capture->GetOwner(), UTextureRenderTarget2D::StaticClass(),
 				FName(*FString::Printf(TEXT("RT_%s"), *StreamID.ToString()))));
-		if (!NewRenderTarget)
+		if (!RT)
 		{
 			OutErrorMessage = TEXT("Failed to create TextureRenderTarget2D");
 			return false;
 		}
-		NewRenderTarget->RenderTargetFormat = RTF_RGBA8;
-		NewRenderTarget->InitCustomFormat(Width, Height, PF_B8G8R8A8, false);
-		NewRenderTarget->bAutoGenerateMips = false;
-		NewRenderTarget->ClearColor = FLinearColor::Black;
-		NewRenderTarget->bGPUSharedFlag = true;
-		NewRenderTarget->UpdateResourceImmediate(true);
-		SceneCapturePtr->TextureTarget = NewRenderTarget;
+		RT->RenderTargetFormat = RTF_RGBA8;
+		RT->InitCustomFormat(Width, Height, PF_B8G8R8A8, false);
+		RT->bAutoGenerateMips = false;
+		RT->ClearColor = FLinearColor::Black;
+		RT->bGPUSharedFlag = true;
+		RT->UpdateResourceImmediate(true);
+		Capture->TextureTarget = RT;
 	}
 	else
 	{
-		const bool bNeedsReinit =
-			SceneCapturePtr->TextureTarget->SizeX != Width ||
-			SceneCapturePtr->TextureTarget->SizeY != Height ||
-			SceneCapturePtr->TextureTarget->RenderTargetFormat != RTF_RGBA8 ||
-			SceneCapturePtr->TextureTarget->OverrideFormat != PF_B8G8R8A8;
+		const bool bNeedsReinit = Capture->TextureTarget->SizeX != Width ||
+			Capture->TextureTarget->SizeY != Height ||
+			Capture->TextureTarget->RenderTargetFormat != RTF_RGBA8 ||
+			Capture->TextureTarget->OverrideFormat != PF_B8G8R8A8;
 		if (bNeedsReinit)
 		{
-			SceneCapturePtr->TextureTarget->RenderTargetFormat = RTF_RGBA8;
-			SceneCapturePtr->TextureTarget->InitCustomFormat(Width, Height, PF_B8G8R8A8, false);
-			SceneCapturePtr->TextureTarget->bAutoGenerateMips = false;
-			SceneCapturePtr->TextureTarget->bGPUSharedFlag = true;
-			SceneCapturePtr->TextureTarget->UpdateResourceImmediate(true);
+			Capture->TextureTarget->RenderTargetFormat = RTF_RGBA8;
+			Capture->TextureTarget->InitCustomFormat(Width, Height, PF_B8G8R8A8, false);
+			Capture->TextureTarget->bAutoGenerateMips = false;
+			Capture->TextureTarget->bGPUSharedFlag = true;
+			Capture->TextureTarget->UpdateResourceImmediate(true);
 		}
 	}
-	SceneCapturePtr->bCaptureEveryFrame = false;
-	SceneCapturePtr->bCaptureOnMovement = false;
-	SceneCapturePtr->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	Capture->bCaptureEveryFrame = false;
+	Capture->bCaptureOnMovement = false;
+	Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 
 	if (RTSPServer && RTSPServer->IsRunning())
 	{
@@ -152,10 +130,7 @@ void FStreamingPipeline::CleanupComponents()
 	if (EncodedVideoFanout)
 	{
 		EncodedVideoFanout->StopAll();
-		if (RTSPSink)
-		{
-			EncodedVideoFanout->RemoveSink(RTSPSink->GetName());
-		}
+		if (RTSPSink) EncodedVideoFanout->RemoveSink(RTSPSink->GetName());
 	}
 	RTSPSink.Reset();
 	H264Source.Reset();
@@ -167,10 +142,7 @@ void FStreamingPipeline::CleanupComponents()
 bool FStreamingPipeline::Start(FString& OutRTSPURL)
 {
 	OutRTSPURL.Empty();
-	if (!bInitialized)
-	{
-		return false;
-	}
+	if (!bInitialized) return false;
 	if (bStreaming)
 	{
 		OutRTSPURL = RTSPURL;
@@ -178,11 +150,11 @@ bool FStreamingPipeline::Start(FString& OutRTSPURL)
 	}
 	if (!HardwareEncoder)
 	{
-		FString EncoderError;
+		FString Error;
 		HardwareEncoder = MakeShared<FHardwareEncoderWrapper>();
-		if (!HardwareEncoder->Initialize(EncoderConfig, EncoderError))
+		if (!HardwareEncoder->Initialize(EncoderConfig, Error))
 		{
-			UE_LOG(LogTemp, Error, TEXT("StreamingPipeline: encoder init failed: %s"), *EncoderError);
+			UE_LOG(LogTemp, Error, TEXT("StreamingPipeline encoder init failed: %s"), *Error);
 			HardwareEncoder.Reset();
 			return false;
 		}
@@ -193,10 +165,8 @@ bool FStreamingPipeline::Start(FString& OutRTSPURL)
 		EncodingThread->SetNALEncodedCallback(
 			FEncodingThread::FOnNALUnitsEncoded::CreateRaw(this, &FStreamingPipeline::OnNALUnitsEncoded));
 	}
-	if (!EncodingThread->Start())
-	{
-		return false;
-	}
+	if (!EncodingThread->Start()) return false;
+
 	if (H264Source && RTSPServer)
 	{
 		if (!RTSPServer->AddStream(StreamID, H264Source.Get(), OutRTSPURL))
@@ -206,14 +176,12 @@ bool FStreamingPipeline::Start(FString& OutRTSPURL)
 		}
 		RTSPURL = OutRTSPURL;
 	}
+
 	FString SinkError;
 	if (EncodedVideoFanout && !EncodedVideoFanout->StartAll(SinkError))
 	{
-		UE_LOG(LogTemp, Error, TEXT("StreamingPipeline: sink startup failed: %s"), *SinkError);
-		if (RTSPServer && H264Source)
-		{
-			RTSPServer->RemoveStream(StreamID);
-		}
+		UE_LOG(LogTemp, Error, TEXT("StreamingPipeline sink startup failed: %s"), *SinkError);
+		if (RTSPServer && H264Source) RTSPServer->RemoveStream(StreamID);
 		EncodingThread->Stop();
 		return false;
 	}
@@ -224,153 +192,112 @@ bool FStreamingPipeline::Start(FString& OutRTSPURL)
 
 void FStreamingPipeline::Stop()
 {
-	if (!bStreaming)
-	{
-		return;
-	}
-	if (EncodedVideoFanout)
-	{
-		EncodedVideoFanout->StopAll();
-	}
-	if (EncodingThread)
-	{
-		EncodingThread->Stop();
-	}
-	if (RTSPServer && H264Source)
-	{
-		RTSPServer->RemoveStream(StreamID);
-	}
+	if (!bStreaming) return;
+	if (EncodedVideoFanout) EncodedVideoFanout->StopAll();
+	if (EncodingThread) EncodingThread->Stop();
+	if (RTSPServer && H264Source) RTSPServer->RemoveStream(StreamID);
 	bStreaming = false;
 }
 
 bool FStreamingPipeline::CaptureFrame()
 {
 	if (!bStreaming || !FrameCapture || !EncodingThread || !EncodedVideoFanout || !EncodedVideoFanout->WantsFrames())
-	{
 		return false;
-	}
-	const double CurrentTime = FPlatformTime::Seconds();
-	if (CurrentTime - LastCaptureTime < 1.0 / Config.GetFrameRateValue())
-	{
-		return false;
-	}
+	const double Now = FPlatformTime::Seconds();
+	if (Now - LastCaptureTime < 1.0 / Config.GetFrameRateValue()) return false;
 	if (!SceneCapture.IsValid() || !SceneCapture->TextureTarget)
 	{
 		CaptureFailureCount++;
 		return false;
 	}
-	USceneCaptureComponent2D* SceneCapturePtr = SceneCapture.Get();
-	SceneCapturePtr->CaptureScene();
-	FCaptureFrame CapturedFrame;
-	if (!FrameCapture->CaptureFrame(SceneCapturePtr, CapturedFrame))
+	USceneCaptureComponent2D* Capture = SceneCapture.Get();
+	Capture->CaptureScene();
+	FCaptureFrame Frame;
+	if (!FrameCapture->CaptureFrame(Capture, Frame))
 	{
 		CaptureFailureCount++;
 		return false;
 	}
-	if (!EncodingThread->QueueFrame(CapturedFrame))
+	if (!EncodingThread->QueueFrame(Frame))
 	{
-		if (FramePool && CapturedFrame.PooledFrame)
-		{
-			FramePool->ReleaseFrame(CapturedFrame.PooledFrame);
-		}
+		if (FramePool && Frame.PooledFrame) FramePool->ReleaseFrame(Frame.PooledFrame);
 		CaptureFailureCount++;
 		return false;
 	}
 	TotalFramesCaptured++;
-	LastCaptureTime = CurrentTime;
+	LastCaptureTime = Now;
 	FrameCounter++;
 	return true;
 }
 
 FEncodedVideoMetadata FStreamingPipeline::BuildMetadata(const TArray<FEncodedNALUnit>& NALUnits) const
 {
-	FEncodedVideoMetadata Metadata;
-	Metadata.FrameNumber = NALUnits.Num() > 0 ? NALUnits[0].FrameNumber : FrameCounter.load();
-	Metadata.TimestampUs = NALUnits.Num() > 0 ? NALUnits[0].TimestampMs * 1000ULL
+	FEncodedVideoMetadata M;
+	M.FrameNumber = NALUnits.Num() > 0 ? NALUnits[0].FrameNumber : FrameCounter.load();
+	M.TimestampUs = NALUnits.Num() > 0 ? NALUnits[0].TimestampMs * 1000ULL
 		: static_cast<uint64>(FPlatformTime::Seconds() * 1000000.0);
-	if (SceneCapture.IsValid())
+	if (!SceneCapture.IsValid()) return M;
+
+	const USceneCaptureComponent2D* Capture = SceneCapture.Get();
+	const FRotator Sensor = Capture->GetRelativeRotation();
+	M.SensorRelativeRollDeg = Sensor.Roll;
+	M.SensorRelativePitchDeg = Sensor.Pitch;
+	M.SensorRelativeYawDeg = Sensor.Yaw;
+	M.bHasSensorAttitude = true;
+	M.HorizontalFovDeg = Capture->FOVAngle;
+	const double Aspect = EncoderConfig.Height > 0
+		? static_cast<double>(EncoderConfig.Width) / static_cast<double>(EncoderConfig.Height) : 1.0;
+	const double HalfH = FMath::DegreesToRadians(M.HorizontalFovDeg * 0.5);
+	M.VerticalFovDeg = FMath::RadiansToDegrees(2.0 * FMath::Atan(FMath::Tan(HalfH) / Aspect));
+	M.bHasFieldOfView = true;
+	if (const AActor* Owner = Capture->GetOwner())
 	{
-		const USceneCaptureComponent2D* Capture = SceneCapture.Get();
-		const FRotator SensorRelative = Capture->GetRelativeRotation();
-		Metadata.SensorRelativeRollDeg = SensorRelative.Roll;
-		Metadata.SensorRelativePitchDeg = SensorRelative.Pitch;
-		Metadata.SensorRelativeYawDeg = SensorRelative.Yaw;
-		Metadata.bHasSensorAttitude = true;
-		Metadata.HorizontalFovDeg = Capture->FOVAngle;
-		const double Aspect = EncoderConfig.Height > 0
-			? static_cast<double>(EncoderConfig.Width) / static_cast<double>(EncoderConfig.Height) : 1.0;
-		const double HalfHFovRad = FMath::DegreesToRadians(Metadata.HorizontalFovDeg * 0.5);
-		Metadata.VerticalFovDeg = FMath::RadiansToDegrees(2.0 * FMath::Atan(FMath::Tan(HalfHFovRad) / Aspect));
-		Metadata.bHasFieldOfView = true;
-		if (const AActor* Owner = Capture->GetOwner())
-		{
-			const FRotator R = Owner->GetActorRotation();
-			Metadata.PlatformRollDeg = R.Roll;
-			Metadata.PlatformPitchDeg = R.Pitch;
-			Metadata.PlatformHeadingDeg = R.Yaw;
-			Metadata.bHasPlatformAttitude = true;
-		}
+		M.LocalPositionCm = Owner->GetActorLocation();
+		M.bHasLocalPosition = true;
+		const FRotator R = Owner->GetActorRotation();
+		M.PlatformRollDeg = R.Roll;
+		M.PlatformPitchDeg = R.Pitch;
+		M.PlatformHeadingDeg = R.Yaw;
+		M.bHasPlatformAttitude = true;
 	}
-	return Metadata;
+	return M;
 }
 
 void FStreamingPipeline::OnNALUnitsEncoded(const TArray<FEncodedNALUnit>& NALUnits)
 {
-	if (bShuttingDown.load() || !EncodedVideoFanout || NALUnits.IsEmpty())
-	{
-		return;
-	}
+	if (bShuttingDown.load() || !EncodedVideoFanout || NALUnits.IsEmpty()) return;
 	for (const FEncodedNALUnit& NAL : NALUnits)
-	{
-		if (NAL.Data.Num() > 0 && !NAL.Data.GetData())
-		{
-			return;
-		}
-	}
+		if (NAL.Data.Num() > 0 && !NAL.Data.GetData()) return;
 	EncodedVideoFanout->Push(NALUnits, BuildMetadata(NALUnits));
 }
 
 void FStreamingPipeline::AddEncodedVideoSink(const TSharedRef<IEncodedVideoSink>& Sink)
 {
-	if (!EncodedVideoFanout)
-	{
-		EncodedVideoFanout = MakeUnique<FEncodedVideoFanout>();
-	}
+	if (!EncodedVideoFanout) EncodedVideoFanout = MakeUnique<FEncodedVideoFanout>();
 	EncodedVideoFanout->AddSink(Sink);
 	if (bStreaming)
 	{
 		FString Error;
 		if (!Sink->Start(Error))
-		{
-			UE_LOG(LogTemp, Error, TEXT("StreamingPipeline: failed to hot-start sink '%s': %s"), *Sink->GetName(), *Error);
-		}
+			UE_LOG(LogTemp, Error, TEXT("Failed to hot-start sink '%s': %s"), *Sink->GetName(), *Error);
 	}
 }
 
 void FStreamingPipeline::RemoveEncodedVideoSink(const FString& SinkName)
 {
-	if (EncodedVideoFanout)
-	{
-		EncodedVideoFanout->RemoveSink(SinkName);
-	}
+	if (EncodedVideoFanout) EncodedVideoFanout->RemoveSink(SinkName);
 }
 
 bool FStreamingPipeline::UpdateConfiguration(const FStreamConfig& NewConfig, FString& OutErrorMessage)
 {
 	const bool bWasStreaming = bStreaming;
-	if (bWasStreaming)
-	{
-		Stop();
-	}
+	if (bWasStreaming) Stop();
 	Shutdown();
-	if (!Initialize(NewConfig, OutErrorMessage))
-	{
-		return false;
-	}
+	if (!Initialize(NewConfig, OutErrorMessage)) return false;
 	if (bWasStreaming)
 	{
-		FString IgnoredURL;
-		if (!Start(IgnoredURL))
+		FString Url;
+		if (!Start(Url))
 		{
 			OutErrorMessage = TEXT("Failed to restart stream after config update");
 			return false;
@@ -402,11 +329,8 @@ FStreamInfo FStreamingPipeline::GetStreamInfo() const
 
 FString FStreamingPipeline::GetStatsString() const
 {
-	return FString::Printf(
-		TEXT("Pipeline [%s]: Initialized=%s, Streaming=%s, Sinks=%d, Captured=%llu, Failures=%llu, Encoder=%s"),
-		*StreamID.ToString(),
-		bInitialized.load() ? TEXT("Yes") : TEXT("No"),
-		bStreaming.load() ? TEXT("Yes") : TEXT("No"),
-		EncodedVideoFanout ? EncodedVideoFanout->NumSinks() : 0,
+	return FString::Printf(TEXT("Pipeline [%s]: Initialized=%s, Streaming=%s, Sinks=%d, Captured=%llu, Failures=%llu, Encoder=%s"),
+		*StreamID.ToString(), bInitialized.load() ? TEXT("Yes") : TEXT("No"),
+		bStreaming.load() ? TEXT("Yes") : TEXT("No"), EncodedVideoFanout ? EncodedVideoFanout->NumSinks() : 0,
 		TotalFramesCaptured.load(), CaptureFailureCount.load(), *EncoderTypeToString(GetEncoderType()));
 }
