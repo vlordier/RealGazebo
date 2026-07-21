@@ -1,10 +1,7 @@
 // Copyright (c) 2024-2025 SUV Lab, Chungbuk National University
 // Licensed under the GNU General Public License v3.0.
 
-#if !PLATFORM_MAC
-// Preserve the current upstream Windows/Linux implementation byte-for-byte.
-#include "HardwareEncoderWrapper.upstream.inc"
-#else
+#if PLATFORM_MAC
 
 #include "Encoder/HardwareEncoderWrapper.h"
 #include "HAL/PlatformTime.h"
@@ -99,8 +96,6 @@ bool FHardwareEncoderWrapper::CreateHardwareEncoder(FString& OutErrorMessage)
 		return false;
 	}
 
-	// EEncoderType currently models NVENC/AMF only; keep Unknown rather than
-	// misreporting the backend until the public enum is extended upstream.
 	EncoderType = EEncoderType::Unknown;
 	return true;
 }
@@ -121,8 +116,7 @@ bool FHardwareEncoderWrapper::EncodeFrame(FRHITexture* Texture, uint64 FrameNumb
 	FTextureRHIRef TextureRef(Texture);
 	const bool bForce = bForceKeyframe || bForceNextKeyframe.exchange(false);
 	const double TimestampUs = FPlatformTime::Seconds() * 1000000.0;
-	const bool bOk = AVCodecEncoder->SendFrame(TextureRef, TimestampUs, bForce);
-	if (!bOk)
+	if (!AVCodecEncoder->SendFrame(TextureRef, TimestampUs, bForce))
 	{
 		EncodingFailureCount++;
 		return false;
@@ -192,27 +186,40 @@ void FHardwareEncoderWrapper::ParseNALUnits(const uint8* Data, uint32 Size, TArr
 	{
 		return;
 	}
+
 	for (uint32 I = 0; I + 3 < Size; )
 	{
 		uint32 StartCode = 0;
 		if (I + 4 <= Size && Data[I] == 0 && Data[I + 1] == 0 && Data[I + 2] == 0 && Data[I + 3] == 1)
+		{
 			StartCode = 4;
+		}
 		else if (Data[I] == 0 && Data[I + 1] == 0 && Data[I + 2] == 1)
+		{
 			StartCode = 3;
+		}
 		if (!StartCode)
 		{
 			++I;
 			continue;
 		}
+
 		uint32 J = I + StartCode;
 		while (J + 3 < Size)
 		{
 			const bool bStart4 = J + 4 <= Size && Data[J] == 0 && Data[J + 1] == 0 && Data[J + 2] == 0 && Data[J + 3] == 1;
 			const bool bStart3 = Data[J] == 0 && Data[J + 1] == 0 && Data[J + 2] == 1;
-			if (bStart4 || bStart3) break;
+			if (bStart4 || bStart3)
+			{
+				break;
+			}
 			++J;
 		}
-		if (J + 3 >= Size) J = Size;
+		if (J + 3 >= Size)
+		{
+			J = Size;
+		}
+
 		const uint32 NALSize = J - I;
 		if (NALSize > StartCode)
 		{
@@ -232,9 +239,12 @@ uint8 FHardwareEncoderWrapper::ExtractNALType(const uint8* Data, uint32 Size) co
 
 FString FHardwareEncoderWrapper::GetStatsString() const
 {
-	return FString::Printf(TEXT("HardwareEncoder (VideoToolbox): Encoded=%llu frames (%llu keyframes), Output=%.2f MB, Failures=%llu"),
-		TotalFramesEncoded.load(), TotalKeyframesEncoded.load(),
-		TotalBytesOutput.load() / (1024.0 * 1024.0), EncodingFailureCount.load());
+	return FString::Printf(
+		TEXT("HardwareEncoder (VideoToolbox): Encoded=%llu frames (%llu keyframes), Output=%.2f MB, Failures=%llu"),
+		TotalFramesEncoded.load(),
+		TotalKeyframesEncoded.load(),
+		TotalBytesOutput.load() / (1024.0 * 1024.0),
+		EncodingFailureCount.load());
 }
 
 #endif // PLATFORM_MAC
