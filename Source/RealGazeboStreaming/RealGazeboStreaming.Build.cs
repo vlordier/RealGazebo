@@ -20,7 +20,8 @@ public class RealGazeboStreaming : ModuleRules
             Path.Combine(ModuleDirectory, "Public", "Camera"),
             Path.Combine(ModuleDirectory, "Public", "Encoder"),
             Path.Combine(ModuleDirectory, "Public", "RTSP"),
-            Path.Combine(ModuleDirectory, "Public", "Pipeline")
+            Path.Combine(ModuleDirectory, "Public", "Pipeline"),
+            Path.Combine(ModuleDirectory, "Public", "Transport")
         });
 
         PrivateIncludePaths.AddRange(new string[]
@@ -29,7 +30,8 @@ public class RealGazeboStreaming : ModuleRules
             Path.Combine(ModuleDirectory, "Private", "Camera"),
             Path.Combine(ModuleDirectory, "Private", "Encoder"),
             Path.Combine(ModuleDirectory, "Private", "RTSP"),
-            Path.Combine(ModuleDirectory, "Private", "Pipeline")
+            Path.Combine(ModuleDirectory, "Private", "Pipeline"),
+            Path.Combine(ModuleDirectory, "Private", "Transport")
         });
 
         PublicDependencyModuleNames.AddRange(new string[]
@@ -40,7 +42,9 @@ public class RealGazeboStreaming : ModuleRules
             "RHI",
             "RenderCore",
             "Live555",
-            "RealGazeboBridge"
+            "RealGazeboBridge",
+            "Sockets",
+            "Networking"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]
