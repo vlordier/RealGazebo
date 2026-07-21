@@ -8,8 +8,6 @@
 class REALGAZEBOSTREAMING_API FEncodedVideoFanout
 {
 public:
-	FEncodedVideoFanout();
-
 	void AddSink(const TSharedRef<IEncodedVideoSink>& Sink);
 	void RemoveSink(const FString& SinkName);
 	void Clear();
