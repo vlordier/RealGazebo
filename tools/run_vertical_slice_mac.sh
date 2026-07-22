@@ -28,6 +28,7 @@ fi
 
 export REALGAZEBO_STANAG_HOST="${REALGAZEBO_STANAG_HOST:-127.0.0.1}"
 export REALGAZEBO_STANAG_PORT="${REALGAZEBO_STANAG_PORT:-5000}"
+export REALGAZEBO_RTSP_PORT="${REALGAZEBO_RTSP_PORT:-8554}"
 
 UE_ROOT="${UE_ROOT:-/Users/Shared/Epic Games/UE_5.8}"
 EDITOR="${UE_EDITOR:-$UE_ROOT/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor}"
@@ -46,11 +47,13 @@ ARGS=(
   -log
   -stdout
   -FullStdOutLogOutput
+  "-RealGazeboRTSPPort=$REALGAZEBO_RTSP_PORT"
   "-RealGazeboStanagHost=$REALGAZEBO_STANAG_HOST"
   "-RealGazeboStanagPort=$REALGAZEBO_STANAG_PORT"
 )
 
-# Optional local ENU -> WGS84 origin. Convention: Unreal X=East, Y=North, Z=Up.
+# Optional geographic origin used after the renderer normalizes its local world
+# pose back to semantic ENU (East/North/Up) metadata.
 [[ -n "${REALGAZEBO_GEO_ORIGIN_LAT:-}" ]] && ARGS+=("-RealGazeboGeoOriginLat=$REALGAZEBO_GEO_ORIGIN_LAT")
 [[ -n "${REALGAZEBO_GEO_ORIGIN_LON:-}" ]] && ARGS+=("-RealGazeboGeoOriginLon=$REALGAZEBO_GEO_ORIGIN_LON")
 [[ -n "${REALGAZEBO_GEO_ORIGIN_ALT:-}" ]] && ARGS+=("-RealGazeboGeoOriginAlt=$REALGAZEBO_GEO_ORIGIN_ALT")
