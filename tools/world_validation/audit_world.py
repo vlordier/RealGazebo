@@ -7,8 +7,9 @@ Run inside UnrealEditor, for example:
 Environment variables:
   REALGAZEBO_WORLD_MAP       Asset path, default /RealGazebo/Maps/RealGazebo
   REALGAZEBO_WORLD_REPORT    JSON output path (defaults under Saved/WorldValidation)
-  REALGAZEBO_WORLD_SCREENSHOT Screenshot path; set empty to skip
-  REALGAZEBO_WORLD_CAMERA    Optional camera actor label/name to use for screenshot
+
+Render capture is intentionally separate because Unreal screenshot tasks are latent and
+require editor ticks. See Content/Python/world_validation/test_world_render.py.
 """
 from __future__ import annotations
 
@@ -78,7 +79,6 @@ def inventory_world() -> dict[str, Any]:
         "cameras": [],
         "static_mesh_actors": [],
     }
-
     category_by_class = {
         "DirectionalLight": "directional_lights",
         "SkyLight": "sky_lights",
@@ -119,37 +119,44 @@ def inventory_world() -> dict[str, Any]:
 
     for component in components:
         cname = class_name(component)
-        owner = safe_prop(component, "owner")
+        try:
+            owner = component.get_owner()
+        except Exception:
+            owner = None
         owner_name = actor_label(owner) if owner else "<no-owner>"
-        if cname in {"StaticMeshComponent", "InstancedStaticMeshComponent", "HierarchicalInstancedStaticMeshComponent"}:
-            mesh = safe_prop(component, "static_mesh")
-            if mesh is None:
-                null_mesh_components.append(f"{owner_name}:{component.get_name()}")
-            else:
-                path = object_path(mesh)
-                if path:
-                    mesh_assets.add(path.split(".")[0])
+        if cname not in {
+            "StaticMeshComponent",
+            "InstancedStaticMeshComponent",
+            "HierarchicalInstancedStaticMeshComponent",
+        }:
+            continue
+        mesh = safe_prop(component, "static_mesh")
+        if mesh is None:
+            null_mesh_components.append(f"{owner_name}:{component.get_name()}")
+        else:
+            path = object_path(mesh)
+            if path:
+                mesh_assets.add(path.split(".")[0])
+        try:
+            count = component.get_num_materials()
+        except Exception:
+            count = 0
+        for index in range(count):
             try:
-                count = component.get_num_materials()
+                material = component.get_material(index)
             except Exception:
-                count = 0
-            for index in range(count):
-                try:
-                    material = component.get_material(index)
-                except Exception:
-                    material = None
-                if material is None:
-                    null_material_slots.append(f"{owner_name}:{component.get_name()}[{index}]")
-                else:
-                    path = object_path(material)
-                    if path:
-                        material_assets.add(path.split(".")[0])
+                material = None
+            if material is None:
+                null_material_slots.append(f"{owner_name}:{component.get_name()}[{index}]")
+            else:
+                path = object_path(material)
+                if path:
+                    material_assets.add(path.split(".")[0])
 
-    asset_library = unreal.EditorAssetLibrary
     missing_assets = [
         path
         for path in sorted(mesh_assets | material_assets)
-        if not asset_library.does_asset_exist(path)
+        if not unreal.EditorAssetLibrary.does_asset_exist(path)
     ]
 
     warnings: list[str] = []
@@ -162,8 +169,12 @@ def inventory_world() -> dict[str, Any]:
     for key, human in required.items():
         if not categories[key]:
             warnings.append(f"missing {human}")
-    if categories["post_process_volumes"] and not any(x.get("unbound") for x in categories["post_process_volumes"]):
-        warnings.append("no unbound PostProcessVolume; FPV cameras may render inconsistent exposure/post-process")
+    if categories["post_process_volumes"] and not any(
+        item.get("unbound") for item in categories["post_process_volumes"]
+    ):
+        warnings.append(
+            "no unbound PostProcessVolume; FPV cameras may render inconsistent exposure/post-process"
+        )
     if not categories["landscapes"]:
         warnings.append("no Landscape actor found; world may rely on static meshes or an unloaded partition")
     if null_mesh_components:
@@ -188,44 +199,6 @@ def inventory_world() -> dict[str, Any]:
     }
 
 
-def choose_camera(camera_name: str | None) -> Any:
-    if not camera_name:
-        return None
-    actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    for actor in actor_subsystem.get_all_level_actors():
-        if class_name(actor) not in {"CameraActor", "CineCameraActor"}:
-            continue
-        if actor_label(actor) == camera_name or actor.get_name() == camera_name:
-            return actor
-    raise RuntimeError(f"camera not found: {camera_name}")
-
-
-def request_screenshot(path: str, camera_name: str | None) -> dict[str, Any]:
-    if not path:
-        return {"requested": False}
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    unreal.AutomationLibrary.finish_loading_before_screenshot()
-    camera = choose_camera(camera_name)
-    task = unreal.AutomationLibrary.take_high_res_screenshot(
-        1920,
-        1080,
-        str(target),
-        camera=camera,
-        mask_enabled=False,
-        capture_hdr=False,
-        delay=0.25,
-        force_game_view=True,
-    )
-    return {
-        "requested": True,
-        "path": str(target),
-        "camera": camera_name,
-        "task_created": task is not None,
-        "note": "Screenshot completion requires additional editor ticks; validate file existence after Unreal exits.",
-    }
-
-
 def main() -> None:
     map_path = os.environ.get("REALGAZEBO_WORLD_MAP", DEFAULT_MAP)
     project_saved = Path(unreal.Paths.project_saved_dir())
@@ -235,24 +208,14 @@ def main() -> None:
             str(project_saved / "WorldValidation" / "world_audit.json"),
         )
     )
-    screenshot_path = os.environ.get(
-        "REALGAZEBO_WORLD_SCREENSHOT",
-        str(project_saved / "WorldValidation" / "world.png"),
-    )
-    camera_name = os.environ.get("REALGAZEBO_WORLD_CAMERA") or None
 
     load_map(map_path)
     report = {
         "map": map_path,
         "engine_version": unreal.SystemLibrary.get_engine_version(),
         "world": inventory_world(),
+        "screenshot": {"requested": False, "reason": "render capture runs as a latent automation test"},
     }
-    try:
-        report["screenshot"] = request_screenshot(screenshot_path, camera_name)
-    except Exception as exc:
-        report["screenshot"] = {"requested": True, "error": str(exc)}
-        report["world"]["warnings"].append(f"screenshot request failed: {exc}")
-
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     unreal.log(f"RealGazebo world audit written to {report_path}")
