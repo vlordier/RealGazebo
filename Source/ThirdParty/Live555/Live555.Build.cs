@@ -14,18 +14,13 @@ public class Live555 : ModuleRules
         Type = ModuleType.External;
 
         string Live555Path = ModuleDirectory;
-        string IncludePath = Path.Combine(Live555Path, "Include");
-
-        PublicSystemIncludePaths.Add(Path.Combine(IncludePath, "BasicUsageEnvironment"));
-        PublicSystemIncludePaths.Add(Path.Combine(IncludePath, "UsageEnvironment"));
-        PublicSystemIncludePaths.Add(Path.Combine(IncludePath, "groupsock"));
-        PublicSystemIncludePaths.Add(Path.Combine(IncludePath, "liveMedia"));
-
         string LibraryPath;
+        string IncludePath;
         string[] LibraryNames;
 
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
+            IncludePath = Path.Combine(Live555Path, "Include");
             LibraryPath = Path.Combine(Live555Path, "lib", "Win64");
             LibraryNames = new[]
             {
@@ -40,6 +35,7 @@ public class Live555 : ModuleRules
         }
         else if (Target.Platform == UnrealTargetPlatform.Linux)
         {
+            IncludePath = Path.Combine(Live555Path, "Include");
             LibraryPath = Path.Combine(Live555Path, "lib", "Linux");
             LibraryNames = new[]
             {
@@ -55,6 +51,7 @@ public class Live555 : ModuleRules
         else if (Target.Platform == UnrealTargetPlatform.Mac)
         {
             LibraryPath = Path.Combine(Live555Path, "lib", "Mac");
+            IncludePath = Path.Combine(LibraryPath, "include");
             LibraryNames = new[]
             {
                 "libliveMedia.a",
@@ -68,6 +65,26 @@ public class Live555 : ModuleRules
         else
         {
             throw new BuildException($"Live555 is not configured for target platform {Target.Platform}.");
+        }
+
+        string[] IncludeComponents =
+        {
+            "BasicUsageEnvironment",
+            "UsageEnvironment",
+            "groupsock",
+            "liveMedia"
+        };
+        foreach (string Component in IncludeComponents)
+        {
+            string ComponentInclude = Path.Combine(IncludePath, Component);
+            if (!Directory.Exists(ComponentInclude))
+            {
+                string Hint = Target.Platform == UnrealTargetPlatform.Mac
+                    ? " Run tools/build_live555_macos.sh from the RealGazebo repository root."
+                    : string.Empty;
+                throw new BuildException($"Missing Live555 include directory: {ComponentInclude}.{Hint}");
+            }
+            PublicSystemIncludePaths.Add(ComponentInclude);
         }
 
         foreach (string LibraryName in LibraryNames)
