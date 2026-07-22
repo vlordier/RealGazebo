@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIVE555_VERSION="${LIVE555_VERSION:-2026.07.08}"
 LIVE555_URL="${LIVE555_URL:-https://download.live555.com/live.${LIVE555_VERSION}.tar.gz}"
+MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-14.0}"
 DEST="$ROOT_DIR/Source/ThirdParty/Live555/lib/Mac"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -29,9 +30,6 @@ SRC="$TMP/live"
 [[ -d "$SRC" ]] || { echo "error: expected extracted directory $SRC" >&2; exit 1; }
 
 cd "$SRC"
-# LIVE555 has used several macOS config names over time. Prefer the no-OpenSSL
-# variant because RealGazebo defines NO_OPENSSL=1, then fall back to recent
-# named macOS releases and historical generic names.
 for candidate in \
   macosx-no-openssl \
   macosx-bigsur \
@@ -50,7 +48,8 @@ if [[ -z "${PLATFORM:-}" ]]; then
   exit 1
 fi
 
-echo "Building LIVE555 using config.${PLATFORM}..."
+echo "Building LIVE555 using config.${PLATFORM} for macOS >= ${MACOSX_DEPLOYMENT_TARGET}..."
+export MACOSX_DEPLOYMENT_TARGET
 ./genMakefiles "$PLATFORM"
 make -j"$(sysctl -n hw.ncpu)"
 
@@ -70,6 +69,7 @@ cp BasicUsageEnvironment/include/* "$DEST/include/BasicUsageEnvironment/"
 cp UsageEnvironment/include/* "$DEST/include/UsageEnvironment/"
 printf '%s\n' "$LIVE555_VERSION" > "$DEST/VERSION"
 printf '%s\n' "$PLATFORM" > "$DEST/CONFIG"
+printf '%s\n' "$MACOSX_DEPLOYMENT_TARGET" > "$DEST/DEPLOYMENT_TARGET"
 
 for lib in "$DEST"/*.a; do
   echo "$(basename "$lib"): $(file "$lib")"
