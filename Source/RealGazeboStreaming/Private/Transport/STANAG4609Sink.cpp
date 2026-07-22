@@ -130,14 +130,14 @@ void FSTANAG4609Sink::EmitProgramTables()
 {
 	TArray<uint8> Pat;
 	Pat.Add(0x00); Pat.Add(0xB0); Pat.Add(0x0D); U16(Pat, 1); Pat.Add(0xC1); Pat.Add(0); Pat.Add(0);
-	U16(Pat, ProgramNumber); Pat.Add(0xE0 | ((PmtPid >> 8) & 0x1F)); Pat.Add(PmtPid); U32(Pat, MpegCrc32(Pat.GetData(), Pat.Num()));
+	U16(Pat, ProgramNumber); Pat.Add(0xE0 | ((PmtPid >> 8) & 0x1F)); Pat.Add(static_cast<uint8>(PmtPid & 0xFF)); U32(Pat, MpegCrc32(Pat.GetData(), Pat.Num()));
 	TArray<uint8> PP; PP.Add(0); PP.Append(Pat); EmitTSPayload(0, PP, true);
 
 	TArray<uint8> Pmt;
 	Pmt.Add(0x02); Pmt.Add(0xB0); Pmt.Add(0x1D); U16(Pmt, ProgramNumber); Pmt.Add(0xC1); Pmt.Add(0); Pmt.Add(0);
-	Pmt.Add(0xE0 | ((VideoPid >> 8) & 0x1F)); Pmt.Add(VideoPid); Pmt.Add(0xF0); Pmt.Add(0);
-	Pmt.Add(0x1B); Pmt.Add(0xE0 | ((VideoPid >> 8) & 0x1F)); Pmt.Add(VideoPid); Pmt.Add(0xF0); Pmt.Add(0);
-	Pmt.Add(0x06); Pmt.Add(0xE0 | ((KlvPid >> 8) & 0x1F)); Pmt.Add(KlvPid); Pmt.Add(0xF0); Pmt.Add(0x06);
+	Pmt.Add(0xE0 | ((VideoPid >> 8) & 0x1F)); Pmt.Add(static_cast<uint8>(VideoPid & 0xFF)); Pmt.Add(0xF0); Pmt.Add(0);
+	Pmt.Add(0x1B); Pmt.Add(0xE0 | ((VideoPid >> 8) & 0x1F)); Pmt.Add(static_cast<uint8>(VideoPid & 0xFF)); Pmt.Add(0xF0); Pmt.Add(0);
+	Pmt.Add(0x06); Pmt.Add(0xE0 | ((KlvPid >> 8) & 0x1F)); Pmt.Add(static_cast<uint8>(KlvPid & 0xFF)); Pmt.Add(0xF0); Pmt.Add(0x06);
 	Pmt.Add(0x05); Pmt.Add(0x04); Pmt.Add('K'); Pmt.Add('L'); Pmt.Add('V'); Pmt.Add('A');
 	U32(Pmt, MpegCrc32(Pmt.GetData(), Pmt.Num()));
 	TArray<uint8> MP; MP.Add(0); MP.Append(Pmt); EmitTSPayload(PmtPid, MP, true);
