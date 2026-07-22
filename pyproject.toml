@@ -1,0 +1,17 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["Binaries", "Intermediate", "Saved", "ThirdParty"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+  "E501", # formatting/long CLI strings are handled pragmatically in scripts
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tools/test_*.py" = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
