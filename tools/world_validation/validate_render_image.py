@@ -26,15 +26,13 @@ class ImageMetrics:
     edge_energy: float
 
 
-def _luma_pixels(image: Image.Image) -> list[int]:
-    return list(image.convert("L").getdata())
-
-
 def _edge_energy(gray: Image.Image) -> float:
     if gray.width < 2 or gray.height < 2:
         return 0.0
-    horizontal = ImageChops.difference(gray, gray.transform(gray.size, Image.Transform.AFFINE, (1, 0, 1, 0, 1, 0)))
-    vertical = ImageChops.difference(gray, gray.transform(gray.size, Image.Transform.AFFINE, (1, 0, 0, 0, 1, 1)))
+    shifted_x = gray.transform(gray.size, Image.Transform.AFFINE, (1, 0, 1, 0, 1, 0))
+    shifted_y = gray.transform(gray.size, Image.Transform.AFFINE, (1, 0, 0, 0, 1, 1))
+    horizontal = ImageChops.difference(gray, shifted_x)
+    vertical = ImageChops.difference(gray, shifted_y)
     h = ImageStat.Stat(horizontal).mean[0]
     v = ImageStat.Stat(vertical).mean[0]
     return float((h + v) * 0.5)
@@ -48,10 +46,10 @@ def compute_metrics(path: Path) -> ImageMetrics:
         total = max(len(values), 1)
         stat = ImageStat.Stat(gray)
         extrema = gray.getextrema()
-        near_gray = 0
-        for red, green, blue in rgb.getdata():
-            if max(red, green, blue) - min(red, green, blue) <= 3:
-                near_gray += 1
+        near_gray = sum(
+            max(red, green, blue) - min(red, green, blue) <= 3
+            for red, green, blue in rgb.getdata()
+        )
         return ImageMetrics(
             width=rgb.width,
             height=rgb.height,
@@ -74,8 +72,6 @@ def normalized_rms_difference(current: Path, baseline: Path) -> float:
         if a.size != b.size:
             return math.inf
         stat = ImageStat.Stat(ImageChops.difference(a, b))
-        channel_rms = [math.sqrt(sum(value * value for value in histogram_segment) / max(sum(histogram_segment), 1)) for histogram_segment in []]
-        # ImageStat.rms already computes RMS intensity per channel.
         return float(sum(stat.rms) / (len(stat.rms) * 255.0))
 
 
@@ -94,7 +90,8 @@ def validate_metrics(
     errors: list[str] = []
     if (metrics.width, metrics.height) != (expected_width, expected_height):
         errors.append(
-            f"unexpected resolution: {metrics.width}x{metrics.height}, expected {expected_width}x{expected_height}"
+            f"unexpected resolution: {metrics.width}x{metrics.height}, "
+            f"expected {expected_width}x{expected_height}"
         )
     if metrics.dark_fraction > max_dark_fraction:
         errors.append(f"render is predominantly black: {metrics.dark_fraction:.3f}")
@@ -130,7 +127,8 @@ def main() -> int:
             errors.append("baseline dimensions do not match")
         elif difference > args.max_baseline_rms:
             errors.append(
-                f"render differs too much from baseline: {difference:.4f} > {args.max_baseline_rms:.4f}"
+                f"render differs too much from baseline: {difference:.4f} > "
+                f"{args.max_baseline_rms:.4f}"
             )
 
     if args.json_path:
