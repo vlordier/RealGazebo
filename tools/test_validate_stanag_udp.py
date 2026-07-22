@@ -14,10 +14,23 @@ from validate_stanag_udp import (
 )
 
 
-def ts_packet(pid: int, body: bytes, *, payload_start: bool = True, adaptation: int = 0) -> bytes:
+def ts_packet(
+    pid: int,
+    body: bytes,
+    *,
+    payload_start: bool = True,
+    adaptation: int = 0,
+) -> bytes:
     if adaptation < 0 or adaptation > 182:
         raise ValueError("invalid adaptation length")
-    packet = bytearray([0x47, ((0x40 if payload_start else 0) | ((pid >> 8) & 0x1F)), pid & 0xFF, 0])
+    packet = bytearray(
+        [
+            0x47,
+            (0x40 if payload_start else 0) | ((pid >> 8) & 0x1F),
+            pid & 0xFF,
+            0,
+        ]
+    )
     if adaptation:
         packet[3] = 0x30
         packet.append(adaptation)
