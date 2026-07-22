@@ -4,14 +4,16 @@ on:
   pull_request:
     paths:
       - 'tools/ardupilot/**'
-      - 'tools/test_streaming_coordinates.py'
+      - 'tools/*.py'
+      - 'tools/*.sh'
       - 'Source/RealGazeboStreaming/**'
       - '.github/workflows/protocol-tools.yml'
   push:
     branches: [main]
     paths:
       - 'tools/ardupilot/**'
-      - 'tools/test_streaming_coordinates.py'
+      - 'tools/*.py'
+      - 'tools/*.sh'
       - 'Source/RealGazeboStreaming/**'
       - '.github/workflows/protocol-tools.yml'
 
@@ -24,7 +26,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Compile Python tooling
-        run: python -m compileall -q tools/ardupilot tools/test_streaming_coordinates.py
+        run: python -m compileall -q tools/ardupilot tools/*.py
+      - name: Shell syntax
+        run: bash -n tools/*.sh tools/ardupilot/*.sh
       - name: RealGazebo UDP protocol tests
         working-directory: tools/ardupilot
         run: python -m unittest -v test_realgazebo_udp.py
