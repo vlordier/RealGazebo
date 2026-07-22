@@ -4,17 +4,21 @@ on:
   pull_request:
     paths:
       - 'tools/**'
-      - 'Source/RealGazeboStreaming/**'
-      - '.github/workflows/protocol-tools.yml'
+      - 'Source/**'
+      - '.github/workflows/**'
+      - 'pyproject.toml'
+      - '.clang-format'
   push:
     branches: [main]
     paths:
       - 'tools/**'
-      - 'Source/RealGazeboStreaming/**'
-      - '.github/workflows/protocol-tools.yml'
+      - 'Source/**'
+      - '.github/workflows/**'
+      - 'pyproject.toml'
+      - '.clang-format'
 
 jobs:
-  python-protocol-tests:
+  python-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,10 +27,67 @@ jobs:
           python-version: '3.12'
       - name: Compile Python tooling
         run: python -m compileall -q tools
+      - name: Unit tests
+        run: python -m unittest discover -v -s tools -p 'test_*.py'
+      - name: ArduPilot protocol tests
+        working-directory: tools/ardupilot
+        run: python -m unittest discover -v -p 'test_*.py'
+
+  python-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Ruff
+        run: python -m pip install --disable-pip-version-check 'ruff==0.15.12'
+      - name: Ruff lint
+        run: ruff check tools
+      - name: Ruff format check
+        run: ruff format --check tools
+
+  shell-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Shell syntax
         run: find tools -name '*.sh' -print0 | xargs -0 -n1 bash -n
-      - name: RealGazebo UDP protocol tests
-        working-directory: tools/ardupilot
-        run: python -m unittest -v test_realgazebo_udp.py
-      - name: Streaming coordinate convention tests
-        run: python -m unittest -v tools/test_streaming_coordinates.py
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: ShellCheck
+        run: find tools -name '*.sh' -print0 | xargs -0 shellcheck -x
+
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@latest
+      - name: Validate GitHub Actions workflows
+        run: "$(go env GOPATH)/bin/actionlint"
+
+  cpp-format-changed:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+      - name: Check changed C++ formatting
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mapfile -t files < <(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- 'Source/**/*.cpp' 'Source/**/*.h')
+          if ((${#files[@]} == 0)); then
+            echo 'No changed C++ files.'
+            exit 0
+          fi
+          printf '%s\n' "${files[@]}"
+          clang-format --dry-run --Werror "${files[@]}"
