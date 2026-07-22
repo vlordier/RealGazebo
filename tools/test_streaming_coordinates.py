@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Regression tests for RealGazebo's Gazebo->Unreal->ENU coordinate convention.
+"""Regression tests for RealGazebo's Gazebo->Unreal->ENU convention.
 
-DataStreamProcessor converts Gazebo ENU to Unreal as:
-  Unreal X = East_gazebo? No: source Gazebo X/Y are mapped as X, -Y.
-For the ArduPilot bridge we intentionally emit Gazebo X=East, Y=North, Z=Up,
-therefore the resulting Unreal world is X=East, Y=-North, Z=Up.
-
-The STANAG metadata normalization must invert the actual bridge mapping exactly.
+The ArduPilot adapter emits Gazebo X=East, Y=North, Z=Up. RealGazebo's existing
+DataStreamProcessor maps Gazebo (X,Y,Z) to Unreal (X,-Y,Z), so the resulting
+Unreal world is X=East, Y=-North (South), Z=Up.
 """
 
 import unittest
 
 
 def gazebo_to_unreal(east_m: float, north_m: float, up_m: float):
-    # Mirrors UDataStreamProcessor::ConvertGazeboPositionToUnreal(X,Y,Z)
-    # with the ArduPilot bridge convention Gazebo X=East, Y=North, Z=Up.
     return east_m * 100.0, -north_m * 100.0, up_m * 100.0
 
 
 def unreal_to_enu(x_cm: float, y_cm: float, z_cm: float):
-    # Exact inverse of the above mapping.
     return x_cm / 100.0, -y_cm / 100.0, z_cm / 100.0
+
+
+def unreal_yaw_to_heading(yaw_deg: float) -> float:
+    # Unreal yaw 0 points +X = East (heading 90). Positive yaw rotates toward
+    # +Y = South, so true heading increases with yaw.
+    return (90.0 + yaw_deg) % 360.0
 
 
 class CoordinateConventionTests(unittest.TestCase):
@@ -37,6 +37,12 @@ class CoordinateConventionTests(unittest.TestCase):
         x, y, _ = gazebo_to_unreal(0.0, 10.0, 0.0)
         self.assertEqual(x, 0)
         self.assertLess(y, 0)
+
+    def test_true_heading(self):
+        self.assertEqual(unreal_yaw_to_heading(0.0), 90.0)     # East
+        self.assertEqual(unreal_yaw_to_heading(90.0), 180.0)  # South
+        self.assertEqual(unreal_yaw_to_heading(-90.0), 0.0)   # North
+        self.assertEqual(unreal_yaw_to_heading(180.0), 270.0) # West
 
 
 if __name__ == "__main__":
