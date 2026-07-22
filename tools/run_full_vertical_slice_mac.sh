@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "usage: $0 /path/to/Project.uproject [map]" >&2
-  echo "Optional env: SIM_START_CMD, COUNT, BASE_TCP_PORT, GUIDED, ARM" >&2
+  echo "Optional env: SIM_START_CMD, COUNT, BASE_TCP_PORT, GUIDED, ARM, VEHICLE_TYPE_NAME" >&2
   exit 2
 fi
 
@@ -12,6 +12,7 @@ MAP="${2:-}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON="${PYTHON:-python3}"
 COUNT="${COUNT:-4}"
+VEHICLE_TYPE_NAME="${VEHICLE_TYPE_NAME:-x500}"
 REALGAZEBO_RTSP_PORT="${REALGAZEBO_RTSP_PORT:-8554}"
 REALGAZEBO_STANAG_PORT="${REALGAZEBO_STANAG_PORT:-5000}"
 export REALGAZEBO_RTSP_PORT REALGAZEBO_STANAG_PORT
@@ -24,17 +25,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-start_bg() {
-  "$@" &
-  local pid=$!
-  pids+=("$pid")
-  echo "$pid"
-}
-
-# Optional site-specific Gazebo + ArduPilot startup. Example from official
-# ArduPilot Gazebo docs for a single Iris:
-#   SIM_START_CMD='gz sim -v4 -r iris_runway.sdf'
-# Multi-model Gazebo worlds can launch their own SITL instances separately.
 if [[ -n "${SIM_START_CMD:-}" ]]; then
   echo "starting simulation: $SIM_START_CMD"
   bash -lc "$SIM_START_CMD" &
@@ -43,8 +33,6 @@ if [[ -n "${SIM_START_CMD:-}" ]]; then
   sleep "${SIM_BOOT_DELAY:-3}"
 fi
 
-# Connect already-running SITL instances (default TCP 5760,5770,...) to
-# RealGazebo and drive Lissajous/boids setpoints over the same MAVLink clients.
 echo "starting MAVLink swarm bridge/controller for COUNT=$COUNT"
 COUNT="$COUNT" \
 BASE_TCP_PORT="${BASE_TCP_PORT:-5760}" \
@@ -58,15 +46,15 @@ ARM="${ARM:-0}" \
 SWARM_PID=$!
 pids+=("$SWARM_PID")
 
-# Start headless Unreal + go2rtc browser relay + STANAG fan-out.
 echo "starting headless Unreal vertical slice"
+COUNT="$COUNT" \
+VEHICLE_TYPE_NAME="$VEHICLE_TYPE_NAME" \
+FPV_CAMERA="${FPV_CAMERA:-fpv}" \
 "$ROOT/tools/run_vertical_slice_mac.sh" "$PROJECT" "$MAP" &
 UE_PID=$!
 pids+=("$UE_PID")
 
-# Give vehicle actors/cameras time to auto-spawn and initialize encoders.
 sleep "${HEALTH_DELAY:-8}"
-
 health_args=(
   --rtsp-port "$REALGAZEBO_RTSP_PORT"
   --stanag-port "$REALGAZEBO_STANAG_PORT"
@@ -83,7 +71,6 @@ else
   exit 1
 fi
 
-# Keep supervising. Exit if Unreal or swarm process exits unexpectedly.
 while true; do
   if ! kill -0 "$UE_PID" 2>/dev/null; then
     echo "Unreal process exited" >&2
