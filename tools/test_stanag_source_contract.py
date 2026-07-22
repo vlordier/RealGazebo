@@ -12,14 +12,20 @@ CPP = ROOT / "Source/RealGazeboStreaming/Private/Transport/STANAG4609Sink.cpp"
 
 
 def parse_cpp_uint16(name: str, source: str) -> int:
-    match = re.search(rf"constexpr\s+uint16\s+{re.escape(name)}\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*;", source)
+    match = re.search(
+        rf"constexpr\s+uint16\s+{re.escape(name)}\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*;",
+        source,
+    )
     if not match:
         raise AssertionError(f"missing C++ constant {name}")
     return int(match.group(1), 0)
 
 
 def parse_cpp_klv_key(source: str) -> bytes:
-    match = re.search(r"static\s+const\s+uint8\s+Key\[16\]\s*=\s*\{([^}]+)\}", source)
+    match = re.search(
+        r"static\s+const\s+uint8\s+Key\[16\]\s*=\s*\{([^}]+)\}",
+        source,
+    )
     if not match:
         raise AssertionError("missing C++ KLV key")
     values = [int(token.strip(), 0) for token in match.group(1).split(",")]
