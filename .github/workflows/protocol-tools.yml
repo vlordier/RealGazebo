@@ -3,17 +3,13 @@ name: protocol-tools
 on:
   pull_request:
     paths:
-      - 'tools/ardupilot/**'
-      - 'tools/*.py'
-      - 'tools/*.sh'
+      - 'tools/**'
       - 'Source/RealGazeboStreaming/**'
       - '.github/workflows/protocol-tools.yml'
   push:
     branches: [main]
     paths:
-      - 'tools/ardupilot/**'
-      - 'tools/*.py'
-      - 'tools/*.sh'
+      - 'tools/**'
       - 'Source/RealGazeboStreaming/**'
       - '.github/workflows/protocol-tools.yml'
 
@@ -26,9 +22,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Compile Python tooling
-        run: python -m compileall -q tools/ardupilot tools/*.py
+        run: python -m compileall -q tools
       - name: Shell syntax
-        run: bash -n tools/*.sh tools/ardupilot/*.sh
+        run: find tools -name '*.sh' -print0 | xargs -0 -n1 bash -n
       - name: RealGazebo UDP protocol tests
         working-directory: tools/ardupilot
         run: python -m unittest -v test_realgazebo_udp.py
