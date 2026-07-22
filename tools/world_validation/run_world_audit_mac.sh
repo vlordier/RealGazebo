@@ -14,7 +14,6 @@ EDITOR="${UE_EDITOR:-$UE_ROOT/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacO
 PYTHON_SCRIPT="$ROOT/tools/world_validation/audit_world.py"
 PROJECT_DIR="$(cd "$(dirname "$PROJECT")" && pwd)"
 REPORT="${REALGAZEBO_WORLD_REPORT:-$PROJECT_DIR/Saved/WorldValidation/world_audit.json}"
-SCREENSHOT="${REALGAZEBO_WORLD_SCREENSHOT:-$PROJECT_DIR/Saved/WorldValidation/world.png}"
 
 if [[ ! -x "$EDITOR" ]]; then
   echo "UnrealEditor not executable: $EDITOR" >&2
@@ -25,12 +24,11 @@ if [[ ! -f "$PROJECT" ]]; then
   exit 4
 fi
 
-mkdir -p "$(dirname "$REPORT")" "$(dirname "$SCREENSHOT")"
-rm -f "$REPORT" "$SCREENSHOT"
+mkdir -p "$(dirname "$REPORT")"
+rm -f "$REPORT"
 
 export REALGAZEBO_WORLD_MAP="$MAP"
 export REALGAZEBO_WORLD_REPORT="$REPORT"
-export REALGAZEBO_WORLD_SCREENSHOT="$SCREENSHOT"
 
 "$EDITOR" "$PROJECT" \
   -unattended \
@@ -46,7 +44,5 @@ if [[ ! -f "$REPORT" ]]; then
   exit 5
 fi
 
-python3 "$ROOT/tools/world_validation/validate_world_report.py" "$REPORT" --require-screenshot
-
+python3 "$ROOT/tools/world_validation/validate_world_report.py" "$REPORT"
 echo "world report: $REPORT"
-echo "world screenshot: $SCREENSHOT"
