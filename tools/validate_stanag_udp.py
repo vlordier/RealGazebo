@@ -11,8 +11,8 @@ import argparse
 import socket
 import time
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 SYNC = 0x47
 PAT_PID = 0x0000
@@ -45,11 +45,16 @@ class TransportAnalysis:
 
     @property
     def ok(self) -> bool:
-        return not self.missing and self.sync_errors == 0 and self.malformed_packets == 0 and self.has_klv_key
+        return (
+            not self.missing
+            and self.sync_errors == 0
+            and self.malformed_packets == 0
+            and self.has_klv_key
+        )
 
 
 def payload(packet: bytes) -> bytes:
-    """Return MPEG-TS payload bytes, or b"" for malformed/no-payload packets."""
+    """Return MPEG-TS payload bytes, or empty bytes for malformed/no-payload packets."""
     if len(packet) != 188 or packet[0] != SYNC:
         return b""
     afc = (packet[3] >> 4) & 0x3
