@@ -37,7 +37,9 @@ def validate_report(report: dict[str, Any], *, require_screenshot: bool = False)
             errors.append(f"missing required world category: {key}")
 
     ppvs = categories.get("post_process_volumes", [])
-    if isinstance(ppvs, list) and ppvs and not any(bool(item.get("unbound")) for item in ppvs if isinstance(item, dict)):
+    if isinstance(ppvs, list) and ppvs and not any(
+        bool(item.get("unbound")) for item in ppvs if isinstance(item, dict)
+    ):
         errors.append("no unbound post-process volume")
 
     missing_assets = world.get("missing_assets", [])
@@ -47,6 +49,10 @@ def validate_report(report: dict[str, Any], *, require_screenshot: bool = False)
     null_meshes = world.get("null_mesh_components", [])
     if null_meshes:
         errors.append(f"static-mesh components without mesh: {len(null_meshes)}")
+
+    null_materials = world.get("null_material_slots", [])
+    if null_materials:
+        errors.append(f"material slots without material: {len(null_materials)}")
 
     screenshot = report.get("screenshot", {})
     if require_screenshot:
