@@ -20,9 +20,6 @@ FStreamingPipeline::FStreamingPipeline(
 {
 	EncodedVideoFanout = MakeUnique<FEncodedVideoFanout>();
 
-	// Automatic STANAG output is intentionally bound to one camera per vehicle
-	// (default camera id: "fpv"). This avoids interleaving independent MPEG-TS
-	// streams when a vehicle also exposes front/bottom/debug cameras.
 	FString StanagHost;
 	FString StanagCamera = TEXT("fpv");
 	int32 StanagBasePort = 0;
@@ -267,7 +264,7 @@ FEncodedVideoMetadata FStreamingPipeline::BuildMetadata(const TArray<FEncodedNAL
 	const FRotator Sensor = Capture->GetRelativeRotation();
 	M.SensorRelativeRollDeg = Sensor.Roll;
 	M.SensorRelativePitchDeg = Sensor.Pitch;
-	M.SensorRelativeYawDeg = Sensor.Yaw;
+	M.SensorRelativeYawDeg = -Sensor.Yaw;
 	M.bHasSensorAttitude = true;
 	M.HorizontalFovDeg = Capture->FOVAngle;
 	const double Aspect = EncoderConfig.Height > 0
@@ -276,7 +273,12 @@ FEncodedVideoMetadata FStreamingPipeline::BuildMetadata(const TArray<FEncodedNAL
 	M.VerticalFovDeg = FMath::RadiansToDegrees(2.0 * FMath::Atan(FMath::Tan(HalfH) / Aspect));
 	M.bHasFieldOfView = true;
 
-	M.LocalPositionCm = Capture->GetComponentLocation();
+	// RealGazebo converts Gazebo ENU into Unreal as:
+	//   Unreal X = North, Unreal Y = -East, Unreal Z = Up (centimetres).
+	// Normalize back to an ENU semantic vector before transport metadata leaves
+	// the renderer. The STANAG sink interprets LocalPositionCm as X=East,Y=North,Z=Up.
+	const FVector UnrealPos = Capture->GetComponentLocation();
+	M.LocalPositionCm = FVector(-UnrealPos.Y, UnrealPos.X, UnrealPos.Z);
 	M.bHasLocalPosition = true;
 
 	if (const AActor* Owner = Capture->GetOwner())
@@ -284,7 +286,9 @@ FEncodedVideoMetadata FStreamingPipeline::BuildMetadata(const TArray<FEncodedNAL
 		const FRotator R = Owner->GetActorRotation();
 		M.PlatformRollDeg = R.Roll;
 		M.PlatformPitchDeg = R.Pitch;
-		M.PlatformHeadingDeg = R.Yaw;
+		// Unreal yaw increases clockwise from +X toward +Y in this converted world;
+		// +X is North and +Y is West, therefore true heading is -Yaw modulo 360.
+		M.PlatformHeadingDeg = FMath::Fmod(-static_cast<double>(R.Yaw) + 360.0, 360.0);
 		M.bHasPlatformAttitude = true;
 	}
 	return M;
