@@ -29,15 +29,23 @@ SRC="$TMP/live"
 [[ -d "$SRC" ]] || { echo "error: expected extracted directory $SRC" >&2; exit 1; }
 
 cd "$SRC"
-# Current LIVE555 releases use config.macos. Older releases used config.macosx;
-# accept both so the pinned version can be updated without silently generating
-# broken Makefiles from a nonexistent config.
-if [[ -f config.macos ]]; then
-  PLATFORM=macos
-elif [[ -f config.macosx ]]; then
-  PLATFORM=macosx
-else
-  echo "error: LIVE555 archive contains neither config.macos nor config.macosx" >&2
+# LIVE555 has used several macOS config names over time. Prefer the no-OpenSSL
+# variant because RealGazebo defines NO_OPENSSL=1, then fall back to recent
+# named macOS releases and historical generic names.
+for candidate in \
+  macosx-no-openssl \
+  macosx-bigsur \
+  macosx-catalina \
+  macos \
+  macosx; do
+  if [[ -f "config.${candidate}" ]]; then
+    PLATFORM="$candidate"
+    break
+  fi
+done
+
+if [[ -z "${PLATFORM:-}" ]]; then
+  echo "error: no supported LIVE555 macOS config found" >&2
   ls -1 config.* >&2 || true
   exit 1
 fi
@@ -61,6 +69,7 @@ cp groupsock/include/* "$DEST/include/groupsock/"
 cp BasicUsageEnvironment/include/* "$DEST/include/BasicUsageEnvironment/"
 cp UsageEnvironment/include/* "$DEST/include/UsageEnvironment/"
 printf '%s\n' "$LIVE555_VERSION" > "$DEST/VERSION"
+printf '%s\n' "$PLATFORM" > "$DEST/CONFIG"
 
 for lib in "$DEST"/*.a; do
   echo "$(basename "$lib"): $(file "$lib")"
