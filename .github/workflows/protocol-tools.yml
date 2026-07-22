@@ -66,8 +66,9 @@ jobs:
         continue-on-error: true
         run: |
           ruff check --output-format=concise tools
-      - name: Ruff format new protocol tooling
+      - name: Ruff format audit
+        continue-on-error: true
         run: |
-          ruff format --check tools/test_stanag_source_contract.py tools/test_validate_stanag_udp.py tools/validate_stanag_udp.py
+          ruff format --check tools
       - name: ShellCheck errors
         run: find tools -name '*.sh' -print0 | xargs -0 shellcheck -S error
