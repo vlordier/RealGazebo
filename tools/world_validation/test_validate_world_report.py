@@ -26,6 +26,7 @@ def good_report() -> dict:
             },
             "missing_assets": [],
             "null_mesh_components": [],
+            "null_material_slots": [],
         },
         "screenshot": {"requested": False},
     }
@@ -51,6 +52,16 @@ class WorldReportValidationTests(unittest.TestCase):
         report["world"]["missing_assets"] = ["/RealGazebo/Missing"]
         self.assertIn("missing referenced assets: 1", validate_report(report))
 
+    def test_null_mesh_is_rejected(self) -> None:
+        report = good_report()
+        report["world"]["null_mesh_components"] = ["Rock:Mesh"]
+        self.assertIn("static-mesh components without mesh: 1", validate_report(report))
+
+    def test_null_material_slot_is_rejected(self) -> None:
+        report = good_report()
+        report["world"]["null_material_slots"] = ["Terrain:Mesh[0]"]
+        self.assertIn("material slots without material: 1", validate_report(report))
+
     def test_screenshot_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             image = Path(temp_dir) / "world.png"
@@ -65,7 +76,10 @@ class WorldReportValidationTests(unittest.TestCase):
             image.write_bytes(b"x")
             report = good_report()
             report["screenshot"] = {"requested": True, "path": str(image)}
-            self.assertIn("screenshot file is unexpectedly small", validate_report(report, require_screenshot=True))
+            self.assertIn(
+                "screenshot file is unexpectedly small",
+                validate_report(report, require_screenshot=True),
+            )
 
 
 if __name__ == "__main__":
