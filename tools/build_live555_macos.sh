@@ -29,7 +29,21 @@ SRC="$TMP/live"
 [[ -d "$SRC" ]] || { echo "error: expected extracted directory $SRC" >&2; exit 1; }
 
 cd "$SRC"
-./genMakefiles macosx
+# Current LIVE555 releases use config.macos. Older releases used config.macosx;
+# accept both so the pinned version can be updated without silently generating
+# broken Makefiles from a nonexistent config.
+if [[ -f config.macos ]]; then
+  PLATFORM=macos
+elif [[ -f config.macosx ]]; then
+  PLATFORM=macosx
+else
+  echo "error: LIVE555 archive contains neither config.macos nor config.macosx" >&2
+  ls -1 config.* >&2 || true
+  exit 1
+fi
+
+echo "Building LIVE555 using config.${PLATFORM}..."
+./genMakefiles "$PLATFORM"
 make -j"$(sysctl -n hw.ncpu)"
 
 rm -rf "$DEST"
@@ -50,6 +64,10 @@ printf '%s\n' "$LIVE555_VERSION" > "$DEST/VERSION"
 
 for lib in "$DEST"/*.a; do
   echo "$(basename "$lib"): $(file "$lib")"
+  if [[ "$ARCH" == "arm64" ]] && ! lipo -info "$lib" 2>&1 | grep -q 'arm64'; then
+    echo "error: $(basename "$lib") does not contain arm64" >&2
+    exit 1
+  fi
 done
 
 echo "LIVE555 macOS libraries installed in $DEST"
