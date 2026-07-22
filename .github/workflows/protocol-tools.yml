@@ -5,12 +5,14 @@ on:
     paths:
       - 'tools/**'
       - 'Source/RealGazeboStreaming/**'
+      - 'Content/Maps/**'
       - '.github/workflows/protocol-tools.yml'
   push:
     branches: [main]
     paths:
       - 'tools/**'
       - 'Source/RealGazeboStreaming/**'
+      - 'Content/Maps/**'
       - '.github/workflows/protocol-tools.yml'
 
 jobs:
@@ -30,3 +32,10 @@ jobs:
         run: python -m unittest -v test_realgazebo_udp.py
       - name: Streaming coordinate convention tests
         run: python -m unittest -v tools/test_streaming_coordinates.py
+      - name: World audit report tests
+        working-directory: tools/world_validation
+        run: python -m unittest -v test_validate_world_report.py
+      - name: Canonical Unreal maps exist
+        run: |
+          test -f Content/Maps/RealGazebo.umap
+          test -f Content/Maps/RealGazeboBridge.umap
