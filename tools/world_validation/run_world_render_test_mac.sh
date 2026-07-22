@@ -14,6 +14,8 @@ EDITOR="${UE_EDITOR:-$UE_ROOT/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacO
 PROJECT_DIR="$(cd "$(dirname "$PROJECT")" && pwd)"
 OUTPUT="${REALGAZEBO_WORLD_SCREENSHOT:-$PROJECT_DIR/Saved/WorldValidation/world.png}"
 AUTOMATION_REPORT="${REALGAZEBO_AUTOMATION_REPORT:-$PROJECT_DIR/Saved/WorldValidation/AutomationReport}"
+METRICS="${REALGAZEBO_RENDER_METRICS:-$PROJECT_DIR/Saved/WorldValidation/render_metrics.json}"
+BASELINE="${REALGAZEBO_RENDER_BASELINE:-}"
 TEST_NAME="${REALGAZEBO_WORLD_TEST:-Editor.Python.RealGazebo.world_validation.test_world_render}"
 
 if [[ ! -x "$EDITOR" ]]; then
@@ -24,9 +26,13 @@ if [[ ! -f "$PROJECT" ]]; then
   echo "uproject not found: $PROJECT" >&2
   exit 4
 fi
+if ! python3 -c 'import PIL' >/dev/null 2>&1; then
+  echo "Pillow is required for quantitative render validation: python3 -m pip install Pillow" >&2
+  exit 7
+fi
 
 mkdir -p "$(dirname "$OUTPUT")" "$AUTOMATION_REPORT"
-rm -f "$OUTPUT"
+rm -f "$OUTPUT" "$METRICS"
 
 export REALGAZEBO_WORLD_MAP="$MAP"
 export REALGAZEBO_WORLD_SCREENSHOT="$OUTPUT"
@@ -51,5 +57,12 @@ if [[ $(stat -f%z "$OUTPUT") -lt 1024 ]]; then
   exit 6
 fi
 
+VALIDATE=(python3 "$ROOT/tools/world_validation/validate_render_image.py" "$OUTPUT" --json "$METRICS")
+if [[ -n "$BASELINE" ]]; then
+  VALIDATE+=(--baseline "$BASELINE")
+fi
+"${VALIDATE[@]}"
+
 echo "render screenshot: $OUTPUT"
+echo "render metrics: $METRICS"
 echo "automation report: $AUTOMATION_REPORT"
