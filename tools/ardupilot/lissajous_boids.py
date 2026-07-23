@@ -12,8 +12,8 @@ import math
 import socket
 import sys
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from realgazebo_udp import Pose, encode_pose
 

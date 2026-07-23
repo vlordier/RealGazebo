@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Tests for Bordeaux OBJ preprocessing tools."""
 
-import json
 import os
 import sys
-import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -76,10 +74,10 @@ class TestAnalyzeRunways(unittest.TestCase):
     def setUp(self):
         sys.path.insert(0, HERE)
         from analyze_runways import (
-            parse_obj_vertices_and_faces,
             build_connected_components,
             compute_bbox,
             compute_pca_oriented_bbox,
+            parse_obj_vertices_and_faces,
         )
         self.parse = parse_obj_vertices_and_faces
         self.build_components = build_connected_components
@@ -87,7 +85,7 @@ class TestAnalyzeRunways(unittest.TestCase):
         self.pca = compute_pca_oriented_bbox
 
     def test_parse_aeroway_faces(self):
-        vertices, face_groups = self.parse(TEST_OBJ, "aeroway")
+        _vertices, face_groups = self.parse(TEST_OBJ, "aeroway")
         self.assertIn("aeroway=ru_1", face_groups)
         self.assertEqual(len(face_groups["aeroway=ru_1"]), 1)
 
@@ -126,14 +124,14 @@ class TestPreprocessBordeaux(unittest.TestCase):
     def setUp(self):
         sys.path.insert(0, HERE)
         from preprocess_bordeaux import (
+            ORIGIN_OBJ,
+            SCALE_UE_CM,
+            TILE_SIZE,
             get_semantic_category,
-            should_keep,
-            obj_to_ue,
             get_tile_key,
             get_ue_material,
-            SCALE_UE_CM,
-            ORIGIN_OBJ,
-            TILE_SIZE,
+            obj_to_ue,
+            should_keep,
         )
         self.get_cat = get_semantic_category
         self.should_keep = should_keep

@@ -66,7 +66,8 @@ readonly NEW_TOKEN="21Live555BufferedPacket"
 # The two symbols that actually collide with Unreal. Used to verify the result.
 readonly COLLIDING=("_ZN14BufferedPacketD1Ev" "_ZN14BufferedPacketD2Ev")
 
-readonly HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly HERE
 readonly LIB="${HERE}/lib/Linux/libliveMedia.a"
 
 OBJCOPY="${OBJCOPY:-$(command -v objcopy || command -v llvm-objcopy || true)}"

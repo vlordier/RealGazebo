@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import socket
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -49,7 +48,7 @@ def check_stanag(bind_host: str, port: int, timeout: float) -> tuple[bool, str]:
         while time.monotonic() < deadline:
             try:
                 data, _addr = sock.recvfrom(65535)
-            except socket.timeout:
+            except TimeoutError:
                 break
             # Sink sends one 188-byte TS packet per UDP datagram.
             if len(data) != 188 or data[0] != 0x47:

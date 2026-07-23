@@ -106,7 +106,7 @@ def main() -> int:
     while time.monotonic() < deadline:
         try:
             data, _ = sock.recvfrom(65535)
-        except socket.timeout:
+        except TimeoutError:
             continue
         datagrams.append(data)
 

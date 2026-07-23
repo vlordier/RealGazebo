@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 
 from PIL import Image, ImageDraw
-
 from validate_render_image import (
     compute_metrics,
     normalized_rms_difference,

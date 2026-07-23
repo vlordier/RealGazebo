@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Encoder/HardwareEncoderWrapper.h"
+#include "HardwareEncoderWrapper.h"
 
 struct REALGAZEBOSTREAMING_API FEncodedVideoMetadata
 {

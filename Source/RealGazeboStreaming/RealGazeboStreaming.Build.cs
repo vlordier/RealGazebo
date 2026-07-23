@@ -58,21 +58,21 @@ public class RealGazeboStreaming : ModuleRules
 
         if (Target.Platform == UnrealTargetPlatform.Mac)
         {
-            PrivateDependencyModuleNames.AddRange(new string[]
-            {
-                "AVCodecsCore",
-                "AVCodecsCoreRHI",
-                "VTCodecs",
-                "VTCodecsRHI"
-            });
-
+            // UE5.8 ships with empty AVCodecs/VTCodecs plugin stubs.
+            // We use native VideoToolbox via Objective-C++ (.mm) files.
             PublicFrameworks.AddRange(new string[]
             {
                 "AVFoundation",
                 "VideoToolbox",
                 "CoreMedia",
-                "CoreVideo"
+                "CoreVideo",
+                "Metal"
             });
+
+            AddEngineThirdPartyPrivateStaticDependencies(Target, "MetalCPP");
+
+            // Compile Objective-C++ source files
+            PrivateIncludePathModuleNames.Add("MetalRHI");
         }
         else
         {

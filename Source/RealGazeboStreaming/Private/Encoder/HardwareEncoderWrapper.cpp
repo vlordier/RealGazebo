@@ -6,245 +6,289 @@
 #include "Encoder/HardwareEncoderWrapper.h"
 #include "HAL/PlatformTime.h"
 #include "RHI.h"
+#include "RHIGPUReadback.h"
+#include "RHICommandList.h"
 #include "RHIResources.h"
-#include "UObject/UObjectGlobals.h"
-#include "Video/Encoders/SimpleVideoEncoder.h"
+
+#include <dlfcn.h>
+
+// CFSTR is not available without CoreFoundation headers (which conflict with UE's FVector).
+// Use clang's built-in for creating constant CFStringRefs.
+#define CFSTR_LITERAL(s) ((void*)__builtin___CFStringMakeConstantString(s))
+
+// We use dlopen/dlsym to access VideoToolbox at runtime, avoiding the FVector
+// type conflict that occurs when including CoreVideo headers alongside UE headers.
+
+// Function pointer types for VideoToolbox C API
+typedef int (*FVTCompressionSessionCreatePtr)(void*, int, int, unsigned int, void*, void*, void*, void*, void*, void**);
+typedef int (*FVTCompressionSessionEncodeFramePtr)(void*, void*, int64_t, int32_t, int64_t, int64_t, int32_t, int64_t, void*, void*, void*);
+typedef void (*FVTCompressionSessionInvalidatePtr)(void*);
+typedef void* (*FCFDictionaryCreateMutablePtr)(void*, int64_t, void*, void*);
+typedef void (*FCFDictionarySetValuePtr)(void*, void*, void*);
+typedef void* (*FCFNumberCreatePtr)(void*, int, void*);
+typedef int (*FCVPixelBufferCreatePtr)(void*, int, int, int, void*, void*);
+typedef int (*FCVPixelBufferLockBaseAddressPtr)(void*, int);
+typedef int (*FCVPixelBufferUnlockBaseAddressPtr)(void*, int);
+typedef void* (*FCVPixelBufferGetBaseAddressPtr)(void*);
+typedef int (*FCVPixelBufferGetBytesPerRowPtr)(void*);
+typedef void (*FCFReleasePtr)(void*);
+typedef void (*FVTSessionSetPropertyPtr)(void*, void*, void*);
+
+static struct FVideoToolboxLib
+{
+    void* Handle = nullptr;
+    bool bLoaded = false;
+
+    FVTCompressionSessionCreatePtr VTCompressionSessionCreate = nullptr;
+    FVTCompressionSessionEncodeFramePtr VTCompressionSessionEncodeFrame = nullptr;
+    FVTCompressionSessionInvalidatePtr VTCompressionSessionInvalidate = nullptr;
+    FCFDictionaryCreateMutablePtr CFDictionaryCreateMutable = nullptr;
+    FCFDictionarySetValuePtr CFDictionarySetValue = nullptr;
+    FCFNumberCreatePtr CFNumberCreate = nullptr;
+    FCVPixelBufferCreatePtr CVPixelBufferCreate = nullptr;
+    FCVPixelBufferLockBaseAddressPtr CVPixelBufferLockBaseAddress = nullptr;
+    FCVPixelBufferUnlockBaseAddressPtr CVPixelBufferUnlockBaseAddress = nullptr;
+    FCVPixelBufferGetBaseAddressPtr CVPixelBufferGetBaseAddress = nullptr;
+    FCVPixelBufferGetBytesPerRowPtr CVPixelBufferGetBytesPerRow = nullptr;
+    FCFReleasePtr CFRelease = nullptr;
+    FVTSessionSetPropertyPtr VTSessionSetProperty = nullptr;
+
+    bool Load()
+    {
+        if (bLoaded) return true;
+        Handle = dlopen("/System/Library/Frameworks/VideoToolbox.framework/VideoToolbox", RTLD_LAZY | RTLD_LOCAL);
+        if (!Handle) return false;
+
+        VTCompressionSessionCreate = (FVTCompressionSessionCreatePtr)dlsym(Handle, "VTCompressionSessionCreate");
+        VTCompressionSessionEncodeFrame = (FVTCompressionSessionEncodeFramePtr)dlsym(Handle, "VTCompressionSessionEncodeFrame");
+        VTCompressionSessionInvalidate = (FVTCompressionSessionInvalidatePtr)dlsym(Handle, "VTCompressionSessionInvalidate");
+        CFDictionaryCreateMutable = (FCFDictionaryCreateMutablePtr)dlsym(Handle, "CFDictionaryCreateMutable");
+        CFDictionarySetValue = (FCFDictionarySetValuePtr)dlsym(Handle, "CFDictionarySetValue");
+        CFNumberCreate = (FCFNumberCreatePtr)dlsym(Handle, "CFNumberCreate");
+        CVPixelBufferCreate = (FCVPixelBufferCreatePtr)dlsym(Handle, "CVPixelBufferCreate");
+        CVPixelBufferLockBaseAddress = (FCVPixelBufferLockBaseAddressPtr)dlsym(Handle, "CVPixelBufferLockBaseAddress");
+        CVPixelBufferUnlockBaseAddress = (FCVPixelBufferUnlockBaseAddressPtr)dlsym(Handle, "CVPixelBufferUnlockBaseAddress");
+        CVPixelBufferGetBaseAddress = (FCVPixelBufferGetBaseAddressPtr)dlsym(Handle, "CVPixelBufferGetBaseAddress");
+        CVPixelBufferGetBytesPerRow = (FCVPixelBufferGetBytesPerRowPtr)dlsym(Handle, "CVPixelBufferGetBytesPerRow");
+        CFRelease = (FCFReleasePtr)dlsym(Handle, "CFRelease");
+        VTSessionSetProperty = (FVTSessionSetPropertyPtr)dlsym(Handle, "VTSessionSetProperty");
+
+        bLoaded = (VTCompressionSessionCreate != nullptr);
+        return bLoaded;
+    }
+} GVideoToolbox;
 
 FHardwareEncoderWrapper::FHardwareEncoderWrapper()
 {
-	UE_LOG(LogTemp, Log, TEXT("HardwareEncoderWrapper: Created (macOS VideoToolbox)"));
+    UE_LOG(LogTemp, Log, TEXT("HardwareEncoderWrapper: Created (macOS VideoToolbox via dlopen)"));
 }
 
 FHardwareEncoderWrapper::~FHardwareEncoderWrapper()
 {
-	Shutdown();
+    Shutdown();
 }
 
 bool FHardwareEncoderWrapper::Initialize(const FEncoderConfig& InConfig, FString& OutErrorMessage)
 {
-	if (bInitialized)
-	{
-		OutErrorMessage = TEXT("Encoder already initialized");
-		return true;
-	}
-	if (!InConfig.Validate(OutErrorMessage))
-	{
-		return false;
-	}
-	Config = InConfig;
-	if (!CreateHardwareEncoder(OutErrorMessage))
-	{
-		return false;
-	}
-	RegisterEncoderCallbacks();
-	bInitialized = true;
-	return true;
+    if (bInitialized) return true;
+    if (!InConfig.Validate(OutErrorMessage)) return false;
+    Config = InConfig;
+
+    if (!GVideoToolbox.Load())
+    {
+        OutErrorMessage = TEXT("Failed to load VideoToolbox framework via dlopen");
+        return false;
+    }
+
+    // Create compression session
+    void* EncoderSpec = GVideoToolbox.CFDictionaryCreateMutable(nullptr, 1, nullptr, nullptr);
+    GVideoToolbox.CFDictionarySetValue(EncoderSpec, CFSTR_LITERAL("EnableHardwareAcceleratedVideoEncoder"), CFSTR_LITERAL("true"));
+
+    void* SourceAttributes = GVideoToolbox.CFDictionaryCreateMutable(nullptr, 3, nullptr, nullptr);
+    GVideoToolbox.CFDictionarySetValue(SourceAttributes, CFSTR_LITERAL("MetalCompatibility"), CFSTR_LITERAL("true"));
+    void* IOSurfaceProps = GVideoToolbox.CFDictionaryCreateMutable(nullptr, 0, nullptr, nullptr);
+    GVideoToolbox.CFDictionarySetValue(SourceAttributes, CFSTR_LITERAL("IOSurfaceProperties"), IOSurfaceProps);
+
+    int64_t PixelType = 0x42475241; // kCVPixelFormatType_32BGRA
+    void* PixelFormatNum = GVideoToolbox.CFNumberCreate(nullptr, 12, &PixelType);
+    GVideoToolbox.CFDictionarySetValue(SourceAttributes, CFSTR_LITERAL("PixelFormatType"), PixelFormatNum);
+
+    void* Session = nullptr;
+    int32_t CodecType = 0x61766331; // 'avc1' = kCMVideoCodecType_H264
+    int Status = GVideoToolbox.VTCompressionSessionCreate(
+        nullptr, Config.Width, Config.Height, CodecType,
+        EncoderSpec, SourceAttributes, nullptr,
+        nullptr, nullptr, &Session);
+
+    GVideoToolbox.CFRelease(EncoderSpec);
+    GVideoToolbox.CFRelease(SourceAttributes);
+
+    if (Status != 0 || !Session)
+    {
+        OutErrorMessage = FString::Printf(TEXT("VTCompressionSessionCreate failed: %d"), Status);
+        return false;
+    }
+
+    EncoderHandle = Session;
+
+    // Configure session
+    GVideoToolbox.VTSessionSetProperty(EncoderHandle, CFSTR_LITERAL("RealTime"), CFSTR_LITERAL("true"));
+    GVideoToolbox.VTSessionSetProperty(EncoderHandle, CFSTR_LITERAL("ProfileLevel"), CFSTR_LITERAL("H264_High_AutoLevel"));
+    GVideoToolbox.VTSessionSetProperty(EncoderHandle, CFSTR_LITERAL("AllowTemporalCompression"), CFSTR_LITERAL("true"));
+    GVideoToolbox.VTSessionSetProperty(EncoderHandle, CFSTR_LITERAL("AllowFrameReordering"), CFSTR_LITERAL("false"));
+
+    int32_t BitrateVal = static_cast<int32_t>(Config.Bitrate);
+    void* BitrateNum = GVideoToolbox.CFNumberCreate(nullptr, 3, &BitrateVal);
+    GVideoToolbox.VTSessionSetProperty(EncoderHandle, CFSTR_LITERAL("AverageBitRate"), BitrateNum);
+
+    int32_t KeyIntervalVal = 60;
+    void* KeyIntervalNum = GVideoToolbox.CFNumberCreate(nullptr, 3, &KeyIntervalVal);
+    GVideoToolbox.VTSessionSetProperty(EncoderHandle, CFSTR_LITERAL("MaxKeyFrameInterval"), KeyIntervalNum);
+
+    bInitialized = true;
+    UE_LOG(LogTemp, Log, TEXT("HardwareEncoderWrapper: Initialized %dx%d H.264 VideoToolbox"), Config.Width, Config.Height);
+    return true;
 }
 
 void FHardwareEncoderWrapper::Shutdown()
 {
-	if (!bInitialized)
-	{
-		return;
-	}
-	bShuttingDown = true;
-	if (AVCodecEncoder)
-	{
-		AVCodecEncoder->Close();
-		AVCodecEncoder->RemoveFromRoot();
-		AVCodecEncoder->ConditionalBeginDestroy();
-		AVCodecEncoder = nullptr;
-	}
-	bInitialized = false;
-	bShuttingDown = false;
-}
+    if (!bInitialized) return;
+    bShuttingDown = true;
 
-bool FHardwareEncoderWrapper::CreateHardwareEncoder(FString& OutErrorMessage)
-{
-	if (!GDynamicRHI)
-	{
-		OutErrorMessage = TEXT("RHI not initialized");
-		return false;
-	}
-	if (RHIGetInterfaceType() != ERHIInterfaceType::Metal)
-	{
-		OutErrorMessage = TEXT("macOS VideoToolbox encoder requires Metal RHI");
-		return false;
-	}
+    if (EncoderHandle)
+    {
+        GVideoToolbox.VTCompressionSessionInvalidate(EncoderHandle);
+        GVideoToolbox.CFRelease(EncoderHandle);
+        EncoderHandle = nullptr;
+    }
 
-	AVCodecEncoder = NewObject<USimpleVideoEncoder>(GetTransientPackage());
-	if (!AVCodecEncoder)
-	{
-		OutErrorMessage = TEXT("Failed to allocate USimpleVideoEncoder");
-		return false;
-	}
-	AVCodecEncoder->AddToRoot();
-
-	FSimpleVideoEncoderConfig CodecConfig;
-	CodecConfig.Width = Config.Width;
-	CodecConfig.Height = Config.Height;
-	CodecConfig.TargetFramerate = Config.FrameRate;
-	CodecConfig.TargetBitrate = static_cast<int32>(FMath::Min<uint64>(Config.Bitrate, MAX_int32));
-	CodecConfig.MaxBitrate = static_cast<int32>(FMath::Min<uint64>(Config.Bitrate + Config.Bitrate / 5, MAX_int32));
-
-	if (!AVCodecEncoder->Open(ESimpleVideoCodec::H264, CodecConfig, false))
-	{
-		AVCodecEncoder->RemoveFromRoot();
-		AVCodecEncoder->ConditionalBeginDestroy();
-		AVCodecEncoder = nullptr;
-		OutErrorMessage = TEXT("Failed to open H.264 VideoToolbox encoder through AVCodecs/VTCodecs");
-		return false;
-	}
-
-	EncoderType = EEncoderType::Unknown;
-	return true;
-}
-
-void FHardwareEncoderWrapper::RegisterEncoderCallbacks()
-{
-	// USimpleVideoEncoder exposes a pull-based packet queue.
+    bInitialized = false;
+    bShuttingDown = false;
 }
 
 bool FHardwareEncoderWrapper::EncodeFrame(FRHITexture* Texture, uint64 FrameNumber, bool bForceKeyframe)
 {
-	if (!bInitialized || bShuttingDown || !AVCodecEncoder || !Texture || !Texture->IsValid())
-	{
-		EncodingFailureCount++;
-		return false;
-	}
+    if (!bInitialized || bShuttingDown || !EncoderHandle || !Texture || !Texture->IsValid())
+    {
+        EncodingFailureCount++;
+        return false;
+    }
 
-	FTextureRHIRef TextureRef(Texture);
-	const bool bForce = bForceKeyframe || bForceNextKeyframe.exchange(false);
-	const double TimestampUs = FPlatformTime::Seconds() * 1000000.0;
-	if (!AVCodecEncoder->SendFrame(TextureRef, TimestampUs, bForce))
-	{
-		EncodingFailureCount++;
-		return false;
-	}
+    // Use FRHIGPUTextureReadback to copy texture to CPU
+    FRHIGPUTextureReadback Readback(TEXT("HardwareEncoderReadback"));
+    FRHICommandListImmediate& RHICmdList = FRHICommandListExecutor::GetImmediateCommandList();
 
-	CurrentFrameNumber = FrameNumber;
-	LastEncodeTime = FPlatformTime::Seconds();
-	TotalFramesEncoded++;
-	return true;
+    Readback.EnqueueCopy(RHICmdList, Texture, FIntVector::ZeroValue, 0,
+        FIntVector(Config.Width, Config.Height, 0));
+
+    RHICmdList.ImmediateFlush(EImmediateFlushType::FlushRHIThread);
+
+    if (!Readback.IsReady())
+    {
+        FPlatformProcess::Sleep(0.001f);
+        if (!Readback.IsReady())
+        {
+            FPlatformProcess::Sleep(0.005f);
+            if (!Readback.IsReady())
+            {
+                EncodingFailureCount++;
+                return false;
+            }
+        }
+    }
+
+    int32 RowPitch = 0;
+    void* Data = Readback.Lock(RowPitch);
+    if (!Data)
+    {
+        EncodingFailureCount++;
+        return false;
+    }
+
+    // Create CVPixelBuffer from readback data
+    void* PixelBuffer = nullptr;
+    int CVResult = GVideoToolbox.CVPixelBufferCreate(
+        nullptr, Config.Width, Config.Height,
+        0x42475241, nullptr, &PixelBuffer);
+
+    if (CVResult != 0 || !PixelBuffer)
+    {
+        Readback.Unlock();
+        EncodingFailureCount++;
+        return false;
+    }
+
+    CVResult = GVideoToolbox.CVPixelBufferLockBaseAddress(PixelBuffer, 0);
+    if (CVResult == 0)
+    {
+        void* Dest = GVideoToolbox.CVPixelBufferGetBaseAddress(PixelBuffer);
+        const uint8* Src = static_cast<const uint8*>(Data);
+        int32 DestRowBytes = GVideoToolbox.CVPixelBufferGetBytesPerRow(PixelBuffer);
+        int32 CopyRowBytes = FMath::Min(RowPitch, DestRowBytes);
+
+        for (int32 Row = 0; Row < Config.Height; ++Row)
+        {
+            FMemory::Memcpy(static_cast<uint8*>(Dest) + Row * DestRowBytes, Src + Row * RowPitch, CopyRowBytes);
+        }
+        GVideoToolbox.CVPixelBufferUnlockBaseAddress(PixelBuffer, 0);
+    }
+    Readback.Unlock();
+
+    const bool bForce = bForceKeyframe || bForceNextKeyframe.exchange(false);
+    const int64 TimestampUs = static_cast<int64>(FPlatformTime::Seconds() * 1000000.0);
+
+    void* FrameProperties = nullptr;
+    if (bForce)
+    {
+        FrameProperties = GVideoToolbox.CFDictionaryCreateMutable(nullptr, 1, nullptr, nullptr);
+        GVideoToolbox.CFDictionarySetValue(FrameProperties, CFSTR_LITERAL("ForceKeyFrame"), CFSTR_LITERAL("true"));
+    }
+
+    int Status = GVideoToolbox.VTCompressionSessionEncodeFrame(
+        EncoderHandle, PixelBuffer,
+        TimestampUs, 1000000, 0,
+        0, 0, 0,
+        FrameProperties, nullptr, nullptr);
+
+    if (FrameProperties) GVideoToolbox.CFRelease(FrameProperties);
+    GVideoToolbox.CFRelease(PixelBuffer);
+
+    if (Status != 0)
+    {
+        EncodingFailureCount++;
+        return false;
+    }
+
+    CurrentFrameNumber = FrameNumber;
+    LastEncodeTime = FPlatformTime::Seconds();
+    TotalFramesEncoded++;
+    return true;
 }
 
 bool FHardwareEncoderWrapper::GetEncodedData(TArray<FEncodedNALUnit>& OutNALUnits)
 {
-	OutNALUnits.Empty();
-	if (!AVCodecEncoder || bShuttingDown)
-	{
-		return false;
-	}
-
-	TArray<FSimpleVideoPacket> Packets;
-	AVCodecEncoder->ReceivePackets(Packets);
-	for (FSimpleVideoPacket& Packet : Packets)
-	{
-		const uint8* Data = Packet.RawPacket.DataPtr.Get();
-		const uint32 Size = Packet.RawPacket.DataSize;
-		if (!Data || Size == 0)
-		{
-			continue;
-		}
-
-		TotalBytesOutput += Size;
-		if (Packet.RawPacket.bIsKeyframe)
-		{
-			TotalKeyframesEncoded++;
-		}
-
-		TArray<FEncodedNALUnit> Parsed;
-		ParseNALUnits(Data, Size, Parsed);
-		if (Parsed.Num() == 0)
-		{
-			FEncodedNALUnit NAL;
-			NAL.Data.Append(Data, Size);
-			NAL.NALType = ExtractNALType(Data, Size);
-			Parsed.Add(MoveTemp(NAL));
-		}
-
-		for (FEncodedNALUnit& NAL : Parsed)
-		{
-			NAL.bIsKeyframe = Packet.RawPacket.bIsKeyframe;
-			NAL.TimestampMs = static_cast<uint64>(Packet.RawPacket.Timestamp / 1000);
-			NAL.FrameNumber = CurrentFrameNumber.load();
-			OutNALUnits.Add(MoveTemp(NAL));
-		}
-	}
-	return OutNALUnits.Num() > 0;
+    FScopeLock Lock(&NALQueueMutex);
+    while (!NALOutputQueue.IsEmpty())
+    {
+        FEncodedNALUnit NAL;
+        if (NALOutputQueue.Dequeue(NAL))
+        {
+            OutNALUnits.Add(MoveTemp(NAL));
+        }
+    }
+    return OutNALUnits.Num() > 0;
 }
 
 void FHardwareEncoderWrapper::ForceKeyframe()
 {
-	bForceNextKeyframe = true;
+    bForceNextKeyframe.store(true);
 }
 
-void FHardwareEncoderWrapper::ParseNALUnits(const uint8* Data, uint32 Size, TArray<FEncodedNALUnit>& OutNALs)
+FString FHardwareEncoderWrapper::GetStats() const
 {
-	OutNALs.Empty();
-	if (!Data || Size < 4)
-	{
-		return;
-	}
-
-	for (uint32 I = 0; I + 3 < Size; )
-	{
-		uint32 StartCode = 0;
-		if (I + 4 <= Size && Data[I] == 0 && Data[I + 1] == 0 && Data[I + 2] == 0 && Data[I + 3] == 1)
-		{
-			StartCode = 4;
-		}
-		else if (Data[I] == 0 && Data[I + 1] == 0 && Data[I + 2] == 1)
-		{
-			StartCode = 3;
-		}
-		if (!StartCode)
-		{
-			++I;
-			continue;
-		}
-
-		uint32 J = I + StartCode;
-		while (J + 3 < Size)
-		{
-			const bool bStart4 = J + 4 <= Size && Data[J] == 0 && Data[J + 1] == 0 && Data[J + 2] == 0 && Data[J + 3] == 1;
-			const bool bStart3 = Data[J] == 0 && Data[J + 1] == 0 && Data[J + 2] == 1;
-			if (bStart4 || bStart3)
-			{
-				break;
-			}
-			++J;
-		}
-		if (J + 3 >= Size)
-		{
-			J = Size;
-		}
-
-		const uint32 NALSize = J - I;
-		if (NALSize > StartCode)
-		{
-			FEncodedNALUnit NAL;
-			NAL.Data.Append(Data + I, NALSize);
-			NAL.NALType = ExtractNALType(Data + I + StartCode, NALSize - StartCode);
-			OutNALs.Add(MoveTemp(NAL));
-		}
-		I = J;
-	}
-}
-
-uint8 FHardwareEncoderWrapper::ExtractNALType(const uint8* Data, uint32 Size) const
-{
-	return Data && Size ? (Data[0] & 0x1F) : 0;
-}
-
-FString FHardwareEncoderWrapper::GetStatsString() const
-{
-	return FString::Printf(
-		TEXT("HardwareEncoder (VideoToolbox): Encoded=%llu frames (%llu keyframes), Output=%.2f MB, Failures=%llu"),
-		TotalFramesEncoded.load(),
-		TotalKeyframesEncoded.load(),
-		TotalBytesOutput.load() / (1024.0 * 1024.0),
-		EncodingFailureCount.load());
+    return FString::Printf(TEXT("MacVideoToolbox: %llu frames, %llu keyframes, %llu bytes, %llu failures"),
+        TotalFramesEncoded.load(), TotalKeyframesEncoded.load(),
+        TotalBytesOutput.load(), EncodingFailureCount.load());
 }
 
 #endif // PLATFORM_MAC

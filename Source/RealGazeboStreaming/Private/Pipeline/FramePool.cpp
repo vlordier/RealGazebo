@@ -134,6 +134,7 @@ TSharedPtr<FPooledFrame> FFramePool::CreateFrame()
 			// - Flags: TexCreate_RenderTargetable | TexCreate_UAV | TexCreate_External | TexCreate_Shared
 			//   - External: Required for CUDA/Vulkan interop (external memory export)
 			//   - Shared: Ensures Vulkan allocates with exportable memory handles
+			//   - Note: macOS uses IOSurface sharing via MetalRHI, not CPUReadback
 			// - NumMips: 1 (no mipmaps needed for video)
 			// - NumSamples: 1 (no MSAA)
 			FRHITextureCreateDesc Desc =

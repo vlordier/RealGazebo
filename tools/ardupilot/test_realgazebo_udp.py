@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import unittest
 
-from realgazebo_udp import POSE_STRUCT, POSE_MESSAGE_ID, Pose, decode_wire_pose, encode_pose
+from realgazebo_udp import POSE_MESSAGE_ID, POSE_STRUCT, Pose, decode_wire_pose, encode_pose
 
 
 class RealGazeboUdpTests(unittest.TestCase):

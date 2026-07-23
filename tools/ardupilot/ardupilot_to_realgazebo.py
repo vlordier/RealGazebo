@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import socket
 import sys
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from realgazebo_udp import Pose, encode_pose
 
@@ -65,7 +66,7 @@ def parse_vehicle(spec: str, default_type: int) -> VehicleState:
 def request_rates(master: object, hz: float) -> None:
     interval_us = int(1_000_000 / max(hz, 1.0))
     for message_id in (30, 32):
-        try:
+        with contextlib.suppress(Exception):
             master.mav.command_long_send(
                 master.target_system,
                 master.target_component,
@@ -79,8 +80,6 @@ def request_rates(master: object, hz: float) -> None:
                 0,
                 0,
             )
-        except Exception:
-            pass
 
 
 def main(argv: Iterable[str] | None = None) -> int:

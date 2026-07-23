@@ -258,6 +258,15 @@ def main():
                 swarm.set_editor_property("DroneCount", 5)
                 swarm.set_editor_property("bAutoStartStreaming", True)
                 swarm.set_editor_property("RTSPPort", 8554)
+
+                # Set drone Blueprint class using correct UE5.8 API
+                drone_bp = unreal.EditorAssetLibrary.load_blueprint_class(
+                    "/RealGazebo/Blueprints/Vehicles/RealGazeboStreaming/UAV/BP_X500Pawn_Stream")
+                if drone_bp:
+                    swarm.set_editor_property("DroneClass", drone_bp)
+                    unreal.log("  DroneClass set to BP_X500Pawn_Stream")
+                else:
+                    unreal.log_warning("  Could not load BP_X500Pawn_Stream Blueprint")
                 print("  SyntheticDroneSwarm created with 5 drones")
             else:
                 print("  WARNING: Failed to spawn SyntheticDroneSwarm")

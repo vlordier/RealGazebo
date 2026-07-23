@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 CATEGORY_KEYS = (
     "directional_lights",
     "sky_lights",
