@@ -16,7 +16,6 @@ OUTPUT="${REALGAZEBO_WORLD_SCREENSHOT:-$PROJECT_DIR/Saved/WorldValidation/world.
 AUTOMATION_REPORT="${REALGAZEBO_AUTOMATION_REPORT:-$PROJECT_DIR/Saved/WorldValidation/AutomationReport}"
 METRICS="${REALGAZEBO_RENDER_METRICS:-$PROJECT_DIR/Saved/WorldValidation/render_metrics.json}"
 BASELINE="${REALGAZEBO_RENDER_BASELINE:-}"
-TEST_NAME="${REALGAZEBO_WORLD_TEST:-Editor.Python.RealGazebo.world_validation.test_world_render}"
 
 if [[ ! -x "$EDITOR" ]]; then
   echo "UnrealEditor not executable: $EDITOR" >&2
@@ -44,8 +43,7 @@ export REALGAZEBO_WORLD_SCREENSHOT="$OUTPUT"
   -log \
   -stdout \
   -FullStdOutLogOutput \
-  "-ExecCmds=Automation RunTest $TEST_NAME;Quit" \
-  "-ReportExportPath=$AUTOMATION_REPORT"
+  "-ExecutePythonScript=$ROOT/tools/world_validation/render_test.py"
 
 if [[ ! -f "$OUTPUT" ]]; then
   echo "render automation did not produce screenshot: $OUTPUT" >&2

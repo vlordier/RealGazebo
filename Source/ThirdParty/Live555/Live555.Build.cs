@@ -125,7 +125,7 @@ public class Live555 : ModuleRules
         PublicDefinitions.Add("MAX_RTSP_CLIENTS=32");
         PublicDefinitions.Add("ENABLE_FRAME_POOLING=1");
 
-        UndefinedIdentifierWarningLevel = WarningLevel.Off;
+        CppCompileWarningSettings.UndefinedIdentifierWarningLevel = WarningLevel.Off;
         bEnableExceptions = false;
     }
 }

@@ -51,6 +51,7 @@ if [[ -z "${PLATFORM:-}" ]]; then
 fi
 
 echo "Building LIVE555 using config.${PLATFORM}..."
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-14.0}"
 ./genMakefiles "$PLATFORM"
 make -j"$(sysctl -n hw.ncpu)"
 
@@ -70,6 +71,7 @@ cp BasicUsageEnvironment/include/* "$DEST/include/BasicUsageEnvironment/"
 cp UsageEnvironment/include/* "$DEST/include/UsageEnvironment/"
 printf '%s\n' "$LIVE555_VERSION" > "$DEST/VERSION"
 printf '%s\n' "$PLATFORM" > "$DEST/CONFIG"
+printf '%s\n' "$MACOSX_DEPLOYMENT_TARGET" > "$DEST/DEPLOYMENT_TARGET"
 
 for lib in "$DEST"/*.a; do
   echo "$(basename "$lib"): $(file "$lib")"

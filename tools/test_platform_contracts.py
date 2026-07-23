@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,7 +25,8 @@ class PlatformContractsTest(unittest.TestCase):
         self.assertIn("LIVE555_VERSION", script)
         self.assertIn("2026.07.08", script)
         self.assertIn("https://download.live555.com/", script)
-        self.assertIn("./genMakefiles macosx", script)
+        self.assertIn("./genMakefiles", script)
+        self.assertIn('"$PLATFORM"', script)
 
     def test_stanag_pid_low_bytes_are_explicit(self) -> None:
         source = (

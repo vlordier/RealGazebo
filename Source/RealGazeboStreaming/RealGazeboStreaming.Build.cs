@@ -21,7 +21,8 @@ public class RealGazeboStreaming : ModuleRules
             Path.Combine(ModuleDirectory, "Public", "Encoder"),
             Path.Combine(ModuleDirectory, "Public", "RTSP"),
             Path.Combine(ModuleDirectory, "Public", "Pipeline"),
-            Path.Combine(ModuleDirectory, "Public", "Transport")
+            Path.Combine(ModuleDirectory, "Public", "Transport"),
+            Path.Combine(ModuleDirectory, "Public", "Synthetic")
         });
 
         PrivateIncludePaths.AddRange(new string[]
@@ -31,7 +32,8 @@ public class RealGazeboStreaming : ModuleRules
             Path.Combine(ModuleDirectory, "Private", "Encoder"),
             Path.Combine(ModuleDirectory, "Private", "RTSP"),
             Path.Combine(ModuleDirectory, "Private", "Pipeline"),
-            Path.Combine(ModuleDirectory, "Private", "Transport")
+            Path.Combine(ModuleDirectory, "Private", "Transport"),
+            Path.Combine(ModuleDirectory, "Private", "Synthetic")
         });
 
         PublicDependencyModuleNames.AddRange(new string[]
@@ -123,7 +125,7 @@ public class RealGazeboStreaming : ModuleRules
         }
 
         OptimizeCode = CodeOptimization.InShippingBuildsOnly;
-        bEnableUndefinedIdentifierWarnings = false;
+        CppCompileWarningSettings.UndefinedIdentifierWarningLevel = WarningLevel.Off;
         bEnableExceptions = false;
     }
 }

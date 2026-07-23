@@ -143,7 +143,7 @@ TSharedPtr<FPooledFrame> FFramePool::CreateFrame()
 				.SetFlags(ETextureCreateFlags::RenderTargetable | ETextureCreateFlags::UAV | ETextureCreateFlags::External | ETextureCreateFlags::Shared)
 				.SetInitialState(ERHIAccess::SRVMask);
 
-			Frame->Texture = RHICreateTexture(Desc);
+			Frame->Texture = RHICmdList.CreateTexture(Desc);
 
 			if (!Frame->Texture.IsValid())
 			{

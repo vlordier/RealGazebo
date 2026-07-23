@@ -496,3 +496,12 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Qwen AI config
+.qwen/
+
+# Duplicate plugin directory (symlink)
+RealGazebo
+
+# Live555 build artifacts
+Source/ThirdParty/Live555/lib/Mac/*.o

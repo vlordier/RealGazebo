@@ -34,7 +34,7 @@ URealGazeboMainWidget::URealGazeboMainWidget(const FObjectInitializer& ObjectIni
     FadeElapsedTime = 0.0f;
 
     // Enable ticking for real-time updates
-    bIsFocusable = false;
+    SetIsFocusable(false);
     SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 }
 
