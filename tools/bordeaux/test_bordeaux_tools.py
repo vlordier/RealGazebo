@@ -177,11 +177,11 @@ class TestPreprocessBordeaux(unittest.TestCase):
         self.assertTrue(self.should_keep("natural_1"))
 
     def test_obj_to_ue_transform(self):
-        # Origin at (-12000, 0, 11000)
-        # OBJ (0, 0, 0) -> UE (12000*14.3, -(-11000)*14.3, 0*14.3)
+        # Origin at (-6000, 0, 8000)
+        # OBJ (0, 0, 0) -> UE (6000*14.3, -(-8000)*14.3, 0*14.3)
         ue = self.obj_to_ue(0.0, 0.0, 0.0)
-        self.assertAlmostEqual(ue[0], 12000.0 * self.scale, delta=1.0)
-        self.assertAlmostEqual(ue[1], 11000.0 * self.scale, delta=1.0)
+        self.assertAlmostEqual(ue[0], 6000.0 * self.scale, delta=1.0)
+        self.assertAlmostEqual(ue[1], 8000.0 * self.scale, delta=1.0)
         self.assertAlmostEqual(ue[2], 0.0, delta=1.0)
 
     def test_obj_to_ue_at_origin(self):

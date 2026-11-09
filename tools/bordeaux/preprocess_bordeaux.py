@@ -26,17 +26,24 @@ from collections import defaultdict
 
 SCALE_UE_CM = 14.3  # 1 OBJ unit = 14.3 UE cm (6.99 units/meter)
 
-# Airport center in OBJ coordinates (from face centroid analysis)
-ORIGIN_OBJ = (-12000.0, 0.0, 11000.0)
+# Airport centre in OBJ coordinates, calculated from the Bordeaux-Merignac
+# runway/apron footprint.  Keeping the operational airport close to (0, 0)
+# avoids a misleading validation view that only caught one runway edge.
+ORIGIN_OBJ = (-6000.0, 0.0, 8000.0)
 
 # Tile size in OBJ units (~1.43km per tile at 14.3 cm/unit)
 TILE_SIZE = 10000.0
 
+# Import a coherent airport district, rather than every distant city layer.
+# The supplied export contains several huge, malformed polygons that stretch
+# across Bordeaux and hide the airport in a top-down view.  This half extent
+# retains both runways, aprons, terminal and immediately adjacent roads.
+AIRPORT_HALF_EXTENT_OBJ = 22000.0
+
 # Semantic categories to KEEP (everything else is discarded)
 KEEP_CATEGORIES = {
-    "aeroway", "building", "highway", "railway", "Water",
-    "natural", "landuse", "area", "leisure", "barrier",
-    "man", "power",
+    "aeroway", "building", "highway", "railway", "barrier", "power",
+    "Water", "natural", "landuse", "area", "leisure",
 }
 
 # Highway subtypes to keep (primary/secondary/tertiary/trunk/motorway/service near airport)
@@ -80,6 +87,11 @@ MATERIAL_MAP = {
 
 def get_semantic_category(obj_name: str) -> str:
     """Extract semantic category from OBJ object name."""
+    # Keep normal OSM building groups, but reject the exporter's numbered
+    # ``building617`` / ``buildin617`` fragments.  Those fragments account
+    # for millions of self-intersecting faces and are not usable buildings.
+    if obj_name == "building" or obj_name.startswith(("building=", "building_")):
+        return "building"
     if "=" in obj_name:
         return obj_name.split("=")[0]
     elif "_" in obj_name:
@@ -133,6 +145,20 @@ def get_ue_material(obj_name: str, obj_material: str) -> str:
         return MATERIAL_MAP[obj_material]
     cat = get_semantic_category(obj_name)
     return MATERIAL_MAP.get(cat, MATERIAL_MAP["default"])
+
+
+def is_within_airport_extent(indices, ue_vertices) -> bool:
+    """Keep only complete faces inside the airport district.
+
+    Rejecting faces that cross the boundary is intentional: such faces are
+    almost always the giant triangulation artifacts found in this export.
+    """
+    half_extent_cm = AIRPORT_HALF_EXTENT_OBJ * SCALE_UE_CM
+    return all(
+        abs(ue_vertices[index][0]) <= half_extent_cm
+        and abs(ue_vertices[index][1]) <= half_extent_cm
+        for index in indices
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +246,10 @@ def preprocess(obj_path: str, output_dir: str):
 
                 if len(idxs) < 3:
                     continue  # Skip degenerate faces
+
+                if not is_within_airport_extent(idxs, ue_vertices):
+                    discarded_faces += 1
+                    continue
 
                 kept_faces += 1
 

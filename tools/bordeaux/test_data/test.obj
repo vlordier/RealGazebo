@@ -1,0 +1,68 @@
+# Test OBJ for bordeaux preprocessing tools
+# Small synthetic scene with known geometry
+
+mtllib test.mtl
+o base
+v -1000 0 -1000
+v 1000 0 -1000
+v 1000 0 1000
+v -1000 0 1000
+f 1 2 3 4
+
+o building=yes_1
+v -500 0 -500
+v 500 0 -500
+v 500 200 -500
+v -500 200 -500
+v -500 0 500
+v 500 0 500
+v 500 200 500
+v -500 200 500
+f 1 2 3 4
+f 5 6 7 8
+f 1 2 6 5
+f 2 3 7 6
+f 3 4 8 7
+f 4 1 5 8
+
+o highway=primary_1
+v -2000 0 -100
+v 2000 0 -100
+v 2000 0 100
+v -2000 0 100
+f 1 2 3 4
+
+o highway=footway_1
+v -100 0 -2000
+v 100 0 -2000
+v 100 0 -1800
+v -100 0 -1800
+f 1 2 3 4
+
+o aeroway=ru_1
+v -300 0 -50
+v 300 0 -50
+v 300 0 50
+v -300 0 50
+f 1 2 3 4
+
+o route_bus_1
+v -50 0 -300
+v 50 0 -300
+v 50 0 -100
+v -50 0 -100
+f 1 2 3 4
+
+o Water_1
+v -1500 0 -1500
+v -500 0 -1500
+v -500 0 -500
+v -1500 0 -500
+f 1 2 3 4
+
+o natural_1
+v 500 0 500
+v 1500 0 500
+v 1500 0 1500
+v 500 0 1500
+f 1 2 3 4
